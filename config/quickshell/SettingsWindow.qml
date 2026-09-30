@@ -181,10 +181,16 @@ FocusScope {
     function infoValue(e) {
         if (e.source === "theme")     return Services.Themes.currentTheme || "—"
         if (e.source === "wallpaper") return Services.Wallpapers.current || "—"
-        if (e.source === "battery")   return Services.Battery.percent + "%" +
+        if (e.source === "battery")   return Services.Battery.hasBattery
+                                             ? Services.Battery.percent + "%" +
                                                (Services.Battery.charging ? " · charging" : "")
+                                             : "No battery"
         if (e.source === "net")       return (Services.Network.isWifi ? "Wi-Fi" : "Wired") +
                                                (Services.Network.connected ? "" : " · offline")
+        if (e.source === "pkgupdates") return Services.Updates.count > 0
+                                             ? Services.Updates.count + " pending"
+                                             : "Up to date"
+        if (e.source === "repoupdate") return Services.Updates.repoStatusText
         return e.value || ""
     }
 

@@ -37,6 +37,9 @@ Item {
         id: canvas
         anchors.fill: parent
         contextType: "2d"
+        // no battery on this machine (VM, desktop): no ring, no level —
+        // the centre glyph below stays so the pill keeps its network icon
+        visible: Services.Battery.hasBattery
 
         onPaint: {
             const ctx = getContext("2d")
@@ -79,9 +82,10 @@ Item {
     }
 
     // bare number in the gap — only once bar.batteryText is toggled on
+    // (and only when there is a battery to report)
     Text {
         font.family: Services.Fonts.family
-        visible: Services.Settings.barBatteryText
+        visible: Services.Settings.barBatteryText && Services.Battery.hasBattery
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: -2
@@ -91,14 +95,15 @@ Item {
         color: Services.Colors.text
     }
 
-    // nerd-font network glyph in the center — same glyphs as the Network
-    // module (wifi / out-of-wifi-state), nudged down to clear the number
+    // nerd-font network glyph in the center — Network.glyph picks the
+    // state (wifi / connected-wired / offline), nudged down to clear the
+    // number
     Text {
         font.family: Services.Fonts.family
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 2
-        text: Services.Network.isWifi ? "󰤨" : "󰤭"
+        text: Services.Network.glyph
         font.pixelSize: 12
         color: Services.Network.connected ? Services.Colors.text : Services.Colors.textMuted
         opacity: Services.Network.connected ? 1 : 0.55

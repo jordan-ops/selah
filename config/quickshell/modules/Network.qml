@@ -6,5 +6,5 @@ Text{
     color: Services.Colors.text
     font.pixelSize: 14
     font.bold: true
-    text: (Services.Network.isWifi ? "󰤨  " : "󰤭  ") + " "
+    text: Services.Network.glyph
 }

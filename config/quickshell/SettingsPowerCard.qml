@@ -58,10 +58,11 @@ Item {
         return "—"
     }
 
-    readonly property real extraHeight: Math.max(0, col.implicitHeight - 64)
-    height: col.implicitHeight
+    readonly property bool hasBat: Services.Battery.hasBattery
+    readonly property real extraHeight: hasBat ? Math.max(0, col.implicitHeight - 64) : 12
+    height: hasBat ? col.implicitHeight : 76
 
-    function read() { rd.running = true }
+    function read() { if (!root.hasBat) return; rd.running = true }
 
     Component.onCompleted: read()
 
@@ -100,10 +101,11 @@ Item {
         }
     }
 
-    Timer { interval: 10000; running: true; repeat: true; onTriggered: root.read() }
+    Timer { interval: 10000; running: root.hasBat; repeat: true; onTriggered: root.read() }
 
     Column {
         id: col
+        visible: root.hasBat
         width: parent.width
         spacing: 10
 
@@ -454,5 +456,19 @@ Item {
                 }
             }
         }
+    }
+
+    // no battery on this machine (VM / desktop box): the card collapses to
+    // one honest line instead of a grid of "0%" tiles
+    Text {
+        visible: !root.hasBat
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: 50
+        font.family: Services.Fonts.family
+        font.pixelSize: 12
+        color: Services.Colors.textMuted
+        text: "No battery on this machine — it runs on AC."
     }
 }

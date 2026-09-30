@@ -16,7 +16,20 @@ Singleton{
     readonly property string name:{
         if (!activeDevice) return "Offline"
         const net = activeDevice.networks.values.find(n => n.connected)
-        return net ? net.name : "Offline"
+        if (net) return net.name
+        // wired devices expose no access-point objects — the old
+        // "net ? name : Offline" here read a CONNECTED cable as Offline
+        return root.isWifi ? "Connected" : "Ethernet"
+    }
+
+    // One glyph for every consumer (bar ring, control centre, tiles):
+    // three states, not two. Wifi gets the waves; a CONNECTED cable gets
+    // md-ethernet (U+F0200, covered by the nerd symbols font) instead of
+    // the wifi-OFF glyph it used to show; only a real disconnect gets the
+    // crossed waves.
+    readonly property string glyph:{
+        if (!root.connected) return "󰤭"
+        return root.isWifi ? "󰤨" : "󰈀"
     }
 
     // The wifi radio device itself, regardless of connection state —

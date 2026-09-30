@@ -145,6 +145,11 @@ Rectangle {
                 Column {
                     id: battCol
 
+                    // no battery on this machine: ring collapses to the
+                    // network glyph and this column vanishes — the divider
+                    // below re-anchors straight to the ring so the net icon
+                    // doesn't float in dead space
+                    visible: Services.Battery.hasBattery
                     anchors.left: ccRing.right
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
@@ -170,8 +175,9 @@ Rectangle {
                 Rectangle {
                     id: statusDivider
 
-                    anchors.left: battCol.right
-                    anchors.leftMargin: 14
+                    anchors.left: Services.Battery.hasBattery ? battCol.right
+                                                              : ccRing.right
+                    anchors.leftMargin: Services.Battery.hasBattery ? 14 : 8
                     anchors.verticalCenter: parent.verticalCenter
                     width: 1
                     height: 26
@@ -182,7 +188,7 @@ Rectangle {
                     font.family: Services.Fonts.family
                     id: netIcon
 
-                    text: Services.Network.isWifi ? "󰤨" : "󰤭"
+                    text: Services.Network.glyph
                     font.pixelSize: 14
                     color: Services.Network.connected ? Services.Colors.text : Services.Colors.textMuted
                     anchors.left: statusDivider.right
@@ -254,7 +260,7 @@ Rectangle {
                 SquareToggle {
                     id: networkTile
 
-                    icon: "󰤨"
+                    icon: Services.Network.glyph
                     label: "Network"
                     active: Services.Network.connected
                     onToggled: Services.Network.toggleWifi()

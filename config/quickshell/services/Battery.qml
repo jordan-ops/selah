@@ -6,8 +6,19 @@ import Quickshell.Services.UPower
 
 Singleton{
     id:root
-    readonly property int percent: Math.round(UPower.displayDevice.percentage * 100)
-    readonly property bool charging: UPower.displayDevice.state === UPowerDeviceState.Charging
+    // A VM or desktop has no laptop battery — UPower still serves a
+    // composite displayDevice that reads 0 %, which used to draw a
+    // permanent "0%" ring and could trip the low-battery alert. Everything
+    // below gates on hasBattery; the bar hides the ring's arc/percentage
+    // but keeps the network glyph that lives inside it.
+    readonly property bool hasBattery:
+        UPower.devices.values.some(d => d.isLaptopBattery)
+    readonly property int percent:
+        hasBattery && UPower.displayDevice
+            ? Math.round(UPower.displayDevice.percentage * 100) : 0
+    readonly property bool charging:
+        UPower.displayDevice
+            ? UPower.displayDevice.state === UPowerDeviceState.Charging : false
 
     property bool lowBatteryNotified: false   // guards against spamming the same alert repeatedly
 
@@ -119,6 +130,7 @@ Singleton{
     property bool sampleForce: false
 
     function grabSample(force) {
+        if (!root.hasBattery) return
         sampleForce = force
         sampleRead.running = false
         sampleRead.running = true
@@ -137,12 +149,13 @@ Singleton{
 
     Timer {
         interval: 60000
-        running: true
+        running: root.hasBattery
         repeat: true
         onTriggered: root.grabSample(false)
     }
 
     onPercentChanged: {
+        if (!hasBattery) return
         if (percent <= 20 && !charging && !lowBatteryNotified) {
             Quickshell.execDetached(["notify-send", "-u", "critical", "Low Battery", "Battery at " + percent + "%"])
             lowBatteryNotified = true
@@ -154,6 +167,7 @@ Singleton{
     }
 
     onChargingChanged: {
+        if (!hasBattery) return
         if (charging) {
             Quickshell.execDetached(["notify-send", "Charging", "Battery is now charging"])
         }

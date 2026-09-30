@@ -11,13 +11,16 @@ clinfo
 cliphist
 cups
 cups-pk-helper
+evince
 fastfetch
+file-roller
 flatpak
 foot
 fragments
 fzf
 git
 gnome-disk-utility
+gnome-text-editor
 grim
 grub
 gst-plugin-pipewire
@@ -66,4 +69,5 @@ wf-recorder
 wireplumber
 wl-clipboard
 wpa_supplicant
+xdg-utils
 zram-generator

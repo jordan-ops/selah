@@ -204,6 +204,15 @@ enable_services() {
             note "could not enable $s — run: sudo systemctl enable $s"
         fi
     done
+
+    # fresh laptops often ship with the wifi/bluetooth rfkill switches
+    # soft-blocked — the adapters then stay invisible to NetworkManager
+    # and bluez even with both services enabled.
+    if [ "$DRY" = 1 ]; then
+        dry "rfkill unblock wifi bluetooth"
+    elif command -v rfkill >/dev/null 2>&1 && sudo rfkill unblock wifi bluetooth 2>/dev/null; then
+        note "rfkill unblock wifi bluetooth"
+    fi
 }
 
 link_configs() {
@@ -333,6 +342,38 @@ install_greeter() {
     fi
 }
 
+# quickshell is listed in packages/official.txt — this tripwire says so out
+# loud if a mirror drop or partial install ever loses it, because without
+# `qs` there is no bar, no settings app and no popup at all.
+check_quickshell() {
+    command -v qs >/dev/null 2>&1 && return 0
+    note "quickshell missing — the bar will NOT start!"
+    note "  sudo pacman -S quickshell   (it is listed in packages/official.txt)"
+    return 0
+}
+
+# Settings ▸ Default apps: fill the document-type defaults nothing has
+# answered yet (pdf/images/video/audio/archives/office text -> the
+# installed handler via xdg-mime). Never overwrites an existing default,
+# so re-running install.sh is always safe.
+seed_default_apps() {
+    head1 "Default apps"
+    local sh="$REPO/config/quickshell/scripts/default-apps.sh"
+    if [ ! -f "$sh" ]; then
+        note "default-apps.sh missing — skipped"
+        return 0
+    fi
+    if ! command -v xdg-mime >/dev/null 2>&1; then
+        note "xdg-mime not found (xdg-utils) — skipped"
+        return 0
+    fi
+    if run bash "$sh" seed; then
+        [ "$DRY" = 1 ] || note "filled unset document-type defaults"
+    else
+        [ "$DRY" = 1 ] || note "default-apps seed failed (continuing)"
+    fi
+}
+
 sync_nvim() {
     [ "$DO_NVM" = 1 ] || return 0
     command -v nvim >/dev/null 2>&1 || return 0
@@ -363,8 +404,9 @@ note "repo   ${REPO/#$HOME/~}"
 note "backup ${BACKUP/#$HOME/~}"
 [ "$DRY" = 1 ] && note "DRY RUN — nothing will be changed"
 
-[ "$DO_APPS" = 1 ] && { install_packages; enable_services; }
+[ "$DO_APPS" = 1 ] && { install_packages; enable_services; check_quickshell; }
 [ "$DO_LINKS" = 1 ] && { link_configs; seed_state; }
+seed_default_apps
 restore_appearance
 apply_theme
 install_greeter

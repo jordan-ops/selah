@@ -6,7 +6,12 @@
 # started in the middle of an install, so doing this on a machine you are
 # sitting at changes nothing that is already running.
 #
+# bluetooth = bluez (already in official.txt). Arch presets it disabled on
+# some installs; without the service the Control Centre toggle and the
+# devices list are dead even though the package is installed.
+#
 # Edit for other hardware (drop ufw, add yours).
 sddm
 NetworkManager
+bluetooth
 ufw
