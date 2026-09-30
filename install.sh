@@ -367,11 +367,9 @@ seed_default_apps() {
         note "xdg-mime not found (xdg-utils) — skipped"
         return 0
     fi
-    if run bash "$sh" seed; then
-        [ "$DRY" = 1 ] || note "filled unset document-type defaults"
-    else
-        [ "$DRY" = 1 ] || note "default-apps seed failed (continuing)"
-    fi
+    # the script prints its own one-line summary (seeded N / all set);
+    # `run` passes stdout through into the log
+    run bash "$sh" seed || note "default-apps seed failed (continuing)"
 }
 
 sync_nvim() {

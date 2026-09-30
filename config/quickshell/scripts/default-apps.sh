@@ -146,6 +146,16 @@ cmd_list() {
 
 cmd_current() {
     local role="$1" id f
+    # bare `current`: one line per role — the overview the README shows
+    # (same order as the Settings page); roles with no pick are skipped
+    if [ -z "$role" ]; then
+        local r line
+        for r in browser terminal filemanager editor image video audio pdf archive office sheet slide; do
+            line=$(cmd_current "$r")
+            [ -n "$line" ] && printf '%s\t%s\n' "$r" "$line"
+        done
+        return 0
+    fi
     if [ "$role" = "terminal" ]; then
         id=$(sed -n 's/.*"defaults\.terminal"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
                  "$SETTINGS" 2>/dev/null | head -1)
@@ -185,7 +195,7 @@ cmd_set() {
 }
 
 cmd_seed() {
-    local role id f cur
+    local role id f cur n=0
     # terminal skipped on purpose: cmd_current's install-order fallback IS
     # the seed — the key only ever exists as an explicit user pick.
     for role in browser filemanager editor image video audio pdf archive office sheet slide; do
@@ -196,14 +206,21 @@ cmd_seed() {
             grep -q '^Hidden=true' "$f" && continue
             claims "$(desk_mimes "$f")" "$role" || continue
             cmd_set "$role" "$id"
+            n=$((n + 1))
             break
         done
     done
+    if [ "$n" -gt 0 ]; then
+        echo "seeded $n unset document-type default(s); the rest were already set"
+    else
+        echo "all document-type defaults already set"
+    fi
     return 0
 }
 
 cmd_launch() {
     local role="$1" id f ex fw
+    [ -n "$role" ] || return 1   # bare `launch` is a usage error, never a pick
     id=$(cmd_current "$role" | cut -f1)
     if [ -n "$id" ] && f=$(desktop_file "$id"); then
         ex=$(desk_exec "$f" | sed 's/ %[fFuUdDnNickvm]//g')
@@ -230,7 +247,8 @@ list)    cmd_list "${2:-}" ;;
 current) cmd_current "${2:-}" ;;
 set)     cmd_set "${2:-}" "${3:-}" ;;
 seed)    cmd_seed ;;
-launch)  cmd_launch "${2:-}" ;;
+launch)  [ -n "${2:-}" ] || { echo "usage: default-apps.sh launch <role>" >&2; exit 2; }
+         cmd_launch "$2" ;;
 *)       echo "usage: default-apps.sh list|current|set|seed|launch <role> [desktop-id]" >&2
          exit 2 ;;
 esac
