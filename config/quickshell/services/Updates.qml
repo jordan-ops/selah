@@ -57,6 +57,164 @@ Singleton {
         }
     }
 
+    // ---- desktop (repo) updates: a deploy pushed to GitHub -------------
+    // Distinct from the package list above: this tracks the git remote
+    // the clone came from, so a pushed selah commit surfaces as a popup
+    // with Update / Later instead of relying on the user to know to
+    // `git pull`. Dismissal is per-sha (dismissedSha): "Later" silences
+    // THIS version for good, the next deploy pops again.
+    property string repoState: "unknown"     // unknown | uptodate | available | error
+    property string remoteSha: ""
+    property string localSha: ""
+    property string repoOwner: ""            // screen allowed to show the dialog
+    property bool repoChecking: false
+    property string repoApply: ""            // "" | running | done | failed
+    property int _applyPolls: 0
+
+    readonly property bool repoUpdateAvailable:
+        repoState === "available" && remoteSha !== ""
+        && remoteSha !== String(Settings.get("updates.dismissedSha", ""))
+    readonly property bool repoPopupOpen:
+        repoUpdateAvailable || repoApply === "running" || repoApply === "failed"
+
+    readonly property string repoStatusText: {
+        if (repoApply === "running") return "Updating…"
+        if (repoChecking) return "Checking…"
+        switch (repoState) {
+        case "available": return "Update available"
+        case "uptodate":  return "Up to date"
+        case "error":     return "Can't reach GitHub"
+        default:          return "Not checked yet"
+        }
+    }
+
+    onRepoPopupOpenChanged: {
+        if (repoPopupOpen) {
+            // same single-owner rule as the picker: the focused screen
+            // records itself, every other screen's window stays hidden —
+            // two Exclusive surfaces would fight over keyboard focus.
+            const fm = Hyprland.focusedMonitor
+            repoOwner = fm ? fm.name
+                : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
+        }
+    }
+    onRepoApplyChanged: _applyPolls = 0
+
+    function checkRepo() {
+        if (!repoCheck.running) repoCheck.running = true
+    }
+
+    function applyRepo() {
+        if (repoState !== "available" || repoApply === "running") return
+        repoApply = "running"
+        // detached: the pull rewrites the config dir and quickshell reloads
+        // mid-flight — an attached Process would be killed in the merge.
+        // The script reports progress via its one-word state file.
+        Quickshell.execDetached(["bash",
+            Quickshell.shellDir + "/scripts/repo-update.sh"])
+    }
+
+    function later() {
+        if (repoApply === "running") return    // let the pull finish first
+        repoApply = ""
+        if (remoteSha !== "") Settings.set("updates.dismissedSha", remoteSha)
+    }
+
+    // stdout contract of scripts/repo-check.sh — one line, see its header
+    function _applyCheck(out) {
+        const line = out.split("\n").map(s => s.trim()).filter(s => s !== "")[0] || ""
+        const p = line.split(" ")
+        if (p[0] === "uptodate") {
+            repoState = "uptodate"; localSha = p[1] || ""; remoteSha = p[1] || ""
+        } else if (p[0] === "available") {
+            repoState = "available"; remoteSha = p[1] || ""; localSha = p[2] || ""
+        } else {
+            // one flaky probe (GitHub stalls occasionally) must not hide
+            // an update already found or drop the shas we know: keep the
+            // last good answer, only report "error" when there never was
+            // one — a machine that boots offline still says so, and the
+            // next tick retries either way.
+            if (localSha === "") repoState = "error"
+        }
+    }
+
+    Process {
+        id: repoCheck
+        command: ["bash", Quickshell.shellDir + "/scripts/repo-check.sh"]
+        property var _lines: []
+        onRunningChanged: {
+            if (running) {
+                root.repoChecking = true
+                _lines = []
+            } else {
+                root.repoChecking = false
+                root._applyCheck(_lines.join("\n"))
+            }
+        }
+        stdout: SplitParser {
+            onRead: line => repoCheck._lines.push(line)
+        }
+    }
+
+    // cheap ls-remote: at startup (triggeredOnStart) + every 10 min. An
+    // offline machine or missing gh credentials lands on "error" and never
+    // shows a dialog — the next tick simply tries again.
+    Timer {
+        interval: 600000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.checkRepo()
+    }
+
+    // Poll scripts/repo-update.sh's state file while an apply runs. The
+    // initial read (repoApply === "") only looks for a pull that was
+    // MID-FLIGHT when the shell reloaded — stale done/failed leftovers
+    // from a previous round are ignored so they can't fake a result.
+    Process {
+        id: applyStateRead
+        // `|| true` keeps a missing state file (first run ever) out of the log
+        command: ["sh", "-c",
+                  "cat \"$HOME/.local/state/quickshell/repo-update.state\" 2>/dev/null || true"]
+        property var _lines: []
+        onRunningChanged: {
+            if (running) {
+                _lines = []
+                return
+            }
+            const s = _lines.join("").trim()
+            if (root.repoApply === "") {
+                if (s === "running") root.repoApply = "running"
+            } else if (root.repoApply === "running") {
+                if (s === "done") {
+                    root.repoApply = "done"
+                    root.checkRepo()   // pull landed — the next check closes the popup
+                    Quickshell.execDetached(["notify-send", "Desktop updated",
+                        "The new version is in place and the shell reloaded."])
+                } else if (s === "failed") {
+                    root.repoApply = "failed"
+                }
+            }
+        }
+        stdout: SplitParser {
+            onRead: line => applyStateRead._lines.push(line)
+        }
+    }
+
+    Timer {
+        interval: 1200
+        repeat: true
+        running: root.repoApply === "running"
+        onTriggered: {
+            root._applyPolls++
+            if (root._applyPolls > 600) { root.repoApply = "failed"; return }
+            applyStateRead.running = false
+            applyStateRead.running = true
+        }
+    }
+
+    Component.onCompleted: applyStateRead.running = true   // resume a mid-pull
+
     function refresh() {
         pacmanCheck.running = true
         aurCheck.running = true
@@ -135,5 +293,14 @@ Singleton {
     IpcHandler {
         target: "updates"
         function toggle(): void { root.toggle() }
+        function check(): void { root.refresh(); root.checkRepo() }
+        function apply(): void { root.applyRepo() }
+        function upgrade(): void { root.upgradeAll() }
+        function dismiss(): void { root.later() }
+        // one-line machine-readable state — used by tests and scripts
+        function status(): string {
+            return [root.repoState, root.repoUpdateAvailable, root.repoApply,
+                    root.remoteSha, root.localSha].join("|")
+        }
     }
 }
