@@ -14,6 +14,9 @@ import "./services" as Services
 //   source "fonts"   — families scanned from ~/.local/share/fonts +
 //                      /usr/share/fonts (path-filtered fc-list output),
 //                      applied through scripts/set-font.sh.
+//   source "apps"    — default-apps.sh list/current/set: candidates are
+//                      the installed .desktop files claiming e.role's
+//                      document types; a pick applies through xdg-mime.
 Item {
     id: root
 
@@ -21,12 +24,22 @@ Item {
     property bool open: false
     readonly property bool isFonts: e && e.source === "fonts"
     readonly property bool isHypr: e && e.source === "hypr"
+    readonly property bool isApps: e && e.source === "apps"
 
     property var families: []
     property string current: ""
 
+    // apps source: [{ value: desktop-id, label: Name }] + the current id's Name
+    property var apps: []
+    property string appLabel: ""
+
     readonly property var options: isHypr ? (e.options || []) : []
     readonly property var shownList: {
+        if (isApps) {
+            const a = searchField.text.trim().toLowerCase()
+            if (a === "") return apps
+            return apps.filter(x => (x.label + " " + x.value).toLowerCase().includes(a))
+        }
         if (!isFonts) return options
         const q = searchField.text.trim().toLowerCase()
         if (q === "") return families
@@ -34,6 +47,7 @@ Item {
     }
     readonly property string currentLabel: {
         if (isFonts) return current !== "" ? current : "—"
+        if (isApps) return appLabel !== "" ? appLabel : (current !== "" ? current : "—")
         if (current === "") return "—"
         const hit = options.find(o => String(o.value) === current)
         return hit ? hit.label : current
@@ -50,6 +64,11 @@ Item {
         root.open = !root.open
         if (root.open && isFonts && families.length === 0) scanProc.running = true
         if (root.open && isHypr) readProc.running = true
+        if (root.open && isApps) {
+            // rescan every open — an app installed since last time shows up
+            appsList.running = false; appsList.running = true
+            appsCurrent.running = false; appsCurrent.running = true
+        }
     }
 
     function pick(value) {
@@ -64,6 +83,12 @@ Item {
                 Services.SettingsCatalog.hyprEval(e.hyprKey,
                                                    Services.SettingsCatalog.hyprLuaValue(String(value)))]
             writeProc.running = true
+        } else if (isApps) {
+            root.current = String(value)
+            appsSet.command = [Quickshell.shellDir + "/scripts/default-apps.sh",
+                               "set", String(root.e ? root.e.role : ""), String(value)]
+            appsSet.running = false
+            appsSet.running = true
         } else {
             root.current = String(value)
             fontProc.command = [Quickshell.shellDir + "/scripts/set-font.sh", String(value)]
@@ -74,6 +99,7 @@ Item {
     Component.onCompleted: {
         if (isHypr) readProc.running = true
         if (isFonts) { scanProc.running = true; currentProc.running = true }
+        if (isApps) { appsList.running = true; appsCurrent.running = true }
     }
 
     // Revert evaled baselines back — re-read so the closed button shows
@@ -140,6 +166,50 @@ Item {
     Process {
         id: fontProc
         onExited: currentProc.running = true
+    }
+
+    // default-apps.sh: candidate scan (installed .desktop files claiming
+    // the role's document types), the current default, and the apply —
+    // parse contract is one "desktop-id<TAB>Name" line per record.
+    Process {
+        id: appsList
+        command: [Quickshell.shellDir + "/scripts/default-apps.sh", "list",
+                  root.e ? root.e.role : ""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                text.split("\n").forEach(line => {
+                    const t = line.indexOf("\t")
+                    if (t < 0) return
+                    out.push({ value: line.slice(0, t), label: line.slice(t + 1) })
+                })
+                root.apps = out
+            }
+        }
+    }
+
+    Process {
+        id: appsCurrent
+        command: [Quickshell.shellDir + "/scripts/default-apps.sh", "current",
+                  root.e ? root.e.role : ""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const line = (text.split("\n")[0] || "")
+                const t = line.indexOf("\t")
+                if (t < 0) { root.current = ""; root.appLabel = "" }
+                else { root.current = line.slice(0, t); root.appLabel = line.slice(t + 1) }
+            }
+        }
+    }
+
+    // after set: re-read both sides so the closed trigger shows the name
+    // that actually landed in mimeapps.list / settings.json
+    Process {
+        id: appsSet
+        onExited: {
+            appsCurrent.running = false; appsCurrent.running = true
+            appsList.running = false;    appsList.running = true
+        }
     }
 
     // trigger — chips-shaped, right aligned
@@ -248,9 +318,10 @@ Item {
             anchors.margins: 4
             spacing: 4
 
-            // filter box — only for the long list (fonts)
+            // filter box — for the long lists (fonts, big app menus)
             Item {
-                visible: root.isFonts && root.families.length > 30
+                visible: (root.isFonts && root.families.length > 30)
+                      || (root.isApps && root.apps.length > 12)
                 width: parent.width
                 height: visible ? 26 : 0
 
@@ -276,7 +347,7 @@ Item {
                         visible: searchField.text === ""
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Filter fonts…"
+                        text: root.isFonts ? "Filter fonts…" : "Filter apps…"
                         color: Services.Colors.textMuted
                         font.pixelSize: 12
                     }

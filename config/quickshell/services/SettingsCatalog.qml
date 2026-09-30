@@ -36,7 +36,9 @@ import QtQuick
 //                        readCommand stdout scanned for readTrue, flip
 //                        runs command[] then re-reads
 //          dropdown  -> expanding searchable list; source "fonts"
-//                        (fc-list scan + set-font.sh)
+//                        (fc-list scan + set-font.sh), "hypr" (options[],
+//                        hyprctl read/eval), "apps" (role — default-apps.sh
+//                        claims scan, applied through xdg-mime)
 //          swatches  -> inline grid; source "themes" | "wallpapers",
 //                        applies via Themes.apply / Wallpapers.apply
 //          wallpapers-> swatches alias for wallpaper grids
@@ -93,6 +95,7 @@ Singleton {
         { id: "sddm",      name: "Login screen",      icon: "system-users" },
         { id: "defaults",  name: "Default apps",      icon: "web-browser" },
         { id: "nvim",      name: "Neovim",            icon: "text-x-generic" },
+        { id: "updates",   name: "Updates",           icon: "software-update-available" },
         { id: "about",    name: "About",              icon: "help-about" }
     ]
 
@@ -496,23 +499,106 @@ Singleton {
           description: "Ticking time, NTP status and a searchable timezone picker (admin auth)",
           keywords: "timezone clock time ntp sync resync date zone region" },
 
-        // ————————————————— Default apps (omasettings §20) —————————————————
-        { id: "defBrowser", page: "defaults", type: "info", value: "—",
+        // ————————————————— Default apps —————————————————
+        // One dropdown per role; candidates come from
+        // scripts/default-apps.sh — apps whose .desktop file CLAIMS the
+        // role's document types — and every pick applies through xdg-mime,
+        // so the file manager, the browser and chat apps all honour it.
+        // The terminal is the exception (no mime type): its choice lives
+        // in settings.json and hypr's binds launch through the same
+        // script, so Super+Return follows this row too.
+        { id: "defBrowser", page: "defaults", type: "dropdown",
+          source: "apps", role: "browser",
           label: "Browser",
-          description: "Options from the omarchy menu · needs omasettings menu run setup.default.browser.*",
-          keywords: "default browser firefox chrome web setup" },
-        { id: "defTerminal", page: "defaults", type: "info", value: "—",
+          description: "Links from apps and Super+B (http · https · .html)",
+          keywords: "default browser firefox chrome chromium web link html http url" },
+        { id: "defTerminal", page: "defaults", type: "dropdown",
+          source: "apps", role: "terminal",
           label: "Terminal",
-          description: "Menu group setup.default.terminal.* · needs omasettings menu run",
-          keywords: "default terminal emulator setup" },
-        { id: "defEditor", page: "defaults", type: "info", value: "—",
-          label: "Editor",
-          description: "Menu group setup.default.editor.* · needs omasettings menu run",
-          keywords: "default editor code setup" },
-        { id: "defAgent", page: "defaults", type: "info", value: "—",
-          label: "Coding agent",
-          description: "agents run <id> validates then runs the menu · needs omasettings agents run",
-          keywords: "default coding agent cli setup claude" },
+          description: "Super+Return opens whatever you pick here",
+          keywords: "default terminal emulator foot kitty alacritty shell command console" },
+        { id: "defFileman", page: "defaults", type: "dropdown",
+          source: "apps", role: "filemanager",
+          label: "File manager",
+          description: "Super+E and every “open folder” action (inode/directory)",
+          keywords: "default files file manager folder nautilus thunar dolphin explorer" },
+        { id: "defEditor", page: "defaults", type: "dropdown",
+          source: "apps", role: "editor",
+          label: "Text editor",
+          description: "Double-clicked text, code and csv files",
+          keywords: "default editor text code vim gedit kate vscode notepad csv" },
+        { id: "defImage", page: "defaults", type: "dropdown",
+          source: "apps", role: "image",
+          label: "Image viewer",
+          description: "png · jpeg · gif · webp · svg · tiff",
+          keywords: "default image picture photo viewer png jpg sxiv imv eog loupe" },
+        { id: "defVideo", page: "defaults", type: "dropdown",
+          source: "apps", role: "video",
+          label: "Video player",
+          description: "mp4 · mkv · webm · avi · mpeg",
+          keywords: "default video movie player mpv vlc celluloid film" },
+        { id: "defAudio", page: "defaults", type: "dropdown",
+          source: "apps", role: "audio",
+          label: "Audio player",
+          description: "mp3 · flac · ogg · wav · m4a",
+          keywords: "default audio music player mp3 flac song sound" },
+        { id: "defPdf", page: "defaults", type: "dropdown",
+          source: "apps", role: "pdf",
+          label: "PDF reader",
+          description: "application/pdf documents",
+          keywords: "default pdf reader viewer evince zathura mupdf document" },
+        { id: "defArchive", page: "defaults", type: "dropdown",
+          source: "apps", role: "archive",
+          label: "Archive manager",
+          description: "zip · tar · gzip · 7z · rar",
+          keywords: "default archive zip extract tar 7z rar compression file-roller" },
+        { id: "defOffice", page: "defaults", type: "dropdown",
+          source: "apps", role: "office",
+          label: "Word documents",
+          description: "odt · doc · docx · rtf",
+          keywords: "default office word document writer libreoffice odt docx" },
+        { id: "defSheet", page: "defaults", type: "dropdown",
+          source: "apps", role: "sheet",
+          label: "Spreadsheets",
+          description: "ods · xls · xlsx",
+          keywords: "default spreadsheet excel sheet calc xlsx ods numbers" },
+        { id: "defSlide", page: "defaults", type: "dropdown",
+          source: "apps", role: "slide",
+          label: "Presentations",
+          description: "odp · ppt · pptx",
+          keywords: "default presentation powerpoint slides impress odp pptx keynote" },
+
+        // ————————————————— Updates —————————————————
+        // Two layers: the selah repo itself (the popup — git remote vs
+        // this clone) and system packages (pacman/AUR — the bar chip).
+        // Info rows live-read services/Updates; actions ride the same qs
+        // ipc path every other command here uses.
+        { id: "upDesktop", page: "updates", type: "info", source: "repoupdate",
+          label: "Desktop (selah)",
+          description: "This clone vs the GitHub repo it came from",
+          keywords: "update desktop selah github repo deploy pull version sync" },
+        { id: "upPackages", page: "updates", type: "info", source: "pkgupdates",
+          label: "System packages",
+          description: "Pending pacman and AUR updates",
+          keywords: "update packages pacman aur yay system pending versions" },
+        { id: "upCheck", page: "updates", type: "action",
+          command: ["qs", "ipc", "call", "updates", "check"],
+          verb: "Check now",
+          label: "Check for updates",
+          description: "Re-run both checks immediately",
+          keywords: "check refresh now search sync update lookup" },
+        { id: "upApply", page: "updates", type: "action",
+          command: ["qs", "ipc", "call", "updates", "apply"],
+          verb: "Update",
+          label: "Update the desktop",
+          description: "git pull + re-run install.sh — no sudo, no packages",
+          keywords: "update desktop pull git apply upgrade selah fresh new" },
+        { id: "upUpgrade", page: "updates", type: "action",
+          command: ["qs", "ipc", "call", "updates", "upgrade"],
+          verb: "Update all",
+          label: "Update system packages",
+          description: "yay -Syu in a terminal (asks for your password)",
+          keywords: "upgrade packages system yay syu terminal update all" },
 
         // ————————————————— Neovim (omasettings §23) —————————————————
         { id: "nvmNumber", page: "nvim", type: "switch",

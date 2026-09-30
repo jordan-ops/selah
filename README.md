@@ -17,10 +17,10 @@ Run one script and the whole desktop appears.
 .
 ├── install.sh              # the one command — see below
 ├── packages/
-│   ├── official.txt        # pacman packages (69), all installed --needed
+│   ├── official.txt        # pacman packages (73), all installed --needed
 │   ├── aur.txt             # yay packages (16), same treatment
 │   ├── fonts.txt           # font packages, routed repo-then-AUR automatically
-│   └── services.txt        # boot services --apps enables (sddm, NetworkManager, ufw)
+│   └── services.txt        # boot services --apps enables (sddm, NetworkManager, bluetooth, ufw)
 ├── config/                 # → ~/.config/<name>
 │   ├── quickshell/         # the shell: bar, picker, settings, services, scripts
 │   ├── hypr/               # lua config (binds, rules, appearance, generated colours)
@@ -58,13 +58,18 @@ asks one question before the AUR step — **NVIDIA drivers?** — defaulting to
 no, so a VM or a machine without old NVIDIA hardware never tries to build the
 legacy `nvidia-470xx` driver (a decline prints the exact `yay -S` command for
 later). It then **enables the boot services** in `packages/services.txt` — a
-fresh Arch leaves `sddm`, `NetworkManager` and `ufw` preset-disabled, so
-without that step you'd be at a TTY instead of a login screen — and finally
-installs the SDDM greeter's root copy (`selah-sddm.sh set selah`).
+fresh Arch leaves `sddm`, `NetworkManager`, `bluetooth` and `ufw`
+preset-disabled, so without that step you'd be at a TTY instead of a login
+screen — **unblocks the rfkill switches** (fresh laptops often ship with
+wifi/Bluetooth soft-blocked, which hides the adapters from NetworkManager and
+bluez entirely), **seeds the default apps** (Settings ▸ Default apps: every
+document type you haven't chosen yet points at the installed handler — an
+existing default is never overwritten), and finally installs the SDDM
+greeter's root copy (`selah-sddm.sh set selah`).
 
-Order of operations: packages → boot services → symlinks → wallpapers → state
-seeds → font → active theme → SDDM greeter → astro plugin sync (skippable with
-`--skip-nvim`).
+Order of operations: packages → boot services + rfkill → symlinks →
+wallpapers → state seeds → default-apps seed → font → active theme → SDDM
+greeter → astro plugin sync (skippable with `--skip-nvim`).
 
 None of it needs a display: the theme step degrades cleanly from a bare TTY
 ("hyprctl reload: no running Hyprland — colors apply next start"), and the GTK
@@ -122,6 +127,9 @@ scripts/seed-wallpapers.sh         # rebuild ~/Wallpapers links from theme backg
 scripts/generate-previews.sh       # re-shoot theme selector thumbnails
 scripts/theme-manage.py            # rename/delete themes (validates paths, blocks active)
 
+scripts/default-apps.sh current    # which app opens each document type
+scripts/default-apps.sh set pdf org.gnome.Evince.desktop   # change one (or use Settings ▸ Default apps)
+
 # optional, one-time: passwordless greeter switching from the settings app
 # (installs /usr/local/sbin/selah-sddm + a NOPASSWD drop-in for just it)
 scripts/selah-sddm.sh setup-help
@@ -163,3 +171,20 @@ git push
 
 New files are picked up automatically on `git add -A`; if you add a *new*
 directory under `config/`, the next `./install.sh` links it too.
+
+Pushes reach the desktop **by themselves**: the shell probes the remote with
+one cheap `git ls-remote` at startup and every ten minutes (three retries —
+a GitHub stall never hides a known-good result), and a new commit pops an
+**Update / Later** dialog on the focused screen.
+
+- **Update** runs `scripts/repo-update.sh` detached: `git pull --ff-only`
+  plus `./install.sh --skip-nvim`, so configs, links and new packages all
+  land — quickshell reloads itself mid-pull, and one notification confirms
+  when it finished.
+- **Later** silences exactly that commit; the next push pops again.
+- A dirty working tree refuses the pull and says so instead of mixing your
+  edits into the merge.
+
+Settings ▸ **Updates** mirrors the same state (`Check for updates`, `Update
+the desktop`, `Update system packages`), and the whole flow is scriptable:
+`qs ipc call updates status|check|apply`.
