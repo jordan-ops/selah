@@ -33,7 +33,7 @@
     // chafa is the renderer a plain terminal can actually do; sixel/kitty
     // need terminal support this machine doesn't advertise.
     "type": "chafa",
-    "source": "/home/jordanzo/.config/fastfetch/selah-logo.png",
+    "source": "~/.config/fastfetch/selah-logo.png",
     "width": 30,
     "chafa": {
       // TRUECOLOR keeps the mark's real colour instead of quantising it

@@ -22,17 +22,23 @@ ROOT_SVC=/usr/local/sbin/selah-sddm
 CONF_DIR=/etc/sddm.conf.d
 CONF=$CONF_DIR/selah.conf
 SYS=/usr/share/sddm/themes/selah
-STATE=/home/jordanzo/.local/state/quickshell
 
-# The staged theme always belongs to the invoking user's home — even when
-# we are running as root via `sudo -n $ROOT_SVC …` (where $HOME=/root).
+# The staged theme and its state belong to the invoking user's home — even
+# when we run as root via `sudo -n $ROOT_SVC …` (where $HOME=/root). Both
+# resolve at runtime, so a clone under any username works unchanged.
 if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then
     STAGE_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-    STAGE_HOME=${STAGE_HOME:-/home/jordanzo}
 else
-    STAGE_HOME=${HOME:-/home/jordanzo}
+    STAGE_HOME=${HOME:-}
+fi
+# Last resort when HOME is unset (bare root shell): ask the passwd db.
+STAGE_HOME=${STAGE_HOME:-$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)}
+if [ -z "$STAGE_HOME" ]; then
+    echo "selah-sddm: cannot resolve the invoking user's home directory" >&2
+    exit 1
 fi
 STAGE=$STAGE_HOME/.local/share/sddm/themes/selah
+STATE=$STAGE_HOME/.local/state/quickshell
 
 SELF=$(readlink -f "$0")
 DRY=0

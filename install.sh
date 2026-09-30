@@ -222,7 +222,7 @@ link_configs() {
 
 seed_state() {
     head1 "State seeds (only files that don't exist yet)"
-    local f dest
+    local f dest old
     run mkdir -p "$HOME/.local/state/quickshell"
     for f in "$REPO"/state/quickshell/*; do
         [ -e "$f" ] || continue
@@ -235,7 +235,13 @@ seed_state() {
             dry "seed   state/quickshell/$(basename "$f")"
         else
             cp -a -- "$f" "$dest"
+            # Seeded state is copied, never symlinked — so absolute paths this
+            # state recorded on another machine can be retargeted to $HOME right
+            # here, where the repo never sees the change.
+            old=$(cat "$f")
+            sed -E -i "s|/home/[^/]+/|$HOME/|g" "$dest"
             note "seeded $(basename "$f")"
+            [ "$old" = "$(cat "$dest")" ] || note "retargeted $(basename "$f") -> $HOME"
         fi
     done
 }

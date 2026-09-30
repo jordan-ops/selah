@@ -139,7 +139,7 @@ Written for one machine, so a few things assume this user and hardware:
 
 | Thing | Note |
 |---|---|
-| `/home/jordanzo` in 7 files | `fastfetch` logo, `selah-sddm.sh` state path (it *wants* your home even as root), `aether` blueprint + `.aether-generated` provenance markers, `state/current-wallpaper`. Change the user and search for it. |
+| `/home/jordanzo` in 4 files | `aether` blueprint (`kl.json`) + three `.aether-generated` provenance markers — cosmetic only: the saved palette still loads, and every marker rewrites itself on your next wallpaper pick. Nothing needs editing by hand — `selah-sddm.sh` resolves your home at runtime, `fastfetch` reads `~`, and `install.sh` retargets seeded state as it copies it. |
 | `packages/aur.txt` | your machine's AUR set — `nvidia-470xx-dkms` is GPU-specific, `*-debug` entries are build artifacts. Trim for other hardware. |
 | `monitors.lua` | `1920x1080@60.06Hz` on `output = ""` |
 | `autostart.lua` | starts `megasync` (your backups) |
