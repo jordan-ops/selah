@@ -22,9 +22,12 @@ branch=$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
 # shell into "error" for ten minutes, so probe up to three times with a
 # short breather between attempts (fast failure when genuinely offline:
 # each attempt errors out immediately without a connection).
+# GIT_TERMINAL_PROMPT=0: a machine with no stored credentials (fresh VM,
+# no gh login) must get an instant 401, never a password prompt nobody
+# can answer — this runs unattended every ten minutes.
 remote=""
 for try in 1 2 3; do
-    remote=$(timeout 15 git -C "$root" ls-remote origin "refs/heads/$branch" 2>/dev/null | cut -f1)
+    remote=$(GIT_TERMINAL_PROMPT=0 timeout 15 git -C "$root" ls-remote origin "refs/heads/$branch" 2>/dev/null | cut -f1)
     [ -n "$remote" ] && break
     [ "$try" -lt 3 ] && sleep 2
 done
