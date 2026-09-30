@@ -1,0 +1,74 @@
+{
+ "vibrance": {
+  "min": -50.0,
+  "max": 50.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "saturation": {
+  "min": -100.0,
+  "max": 100.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "contrast": {
+  "min": -30.0,
+  "max": 30.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "brightness": {
+  "min": -30.0,
+  "max": 30.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "shadows": {
+  "min": -50.0,
+  "max": 50.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "highlights": {
+  "min": -50.0,
+  "max": 50.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "hueShift": {
+  "min": -180.0,
+  "max": 180.0,
+  "step": 10.0,
+  "default": 0.0
+ },
+ "temperature": {
+  "min": -50.0,
+  "max": 50.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "tint": {
+  "min": -50.0,
+  "max": 50.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "blackPoint": {
+  "min": -30.0,
+  "max": 30.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "whitePoint": {
+  "min": -30.0,
+  "max": 30.0,
+  "step": 5.0,
+  "default": 0.0
+ },
+ "gamma": {
+  "min": 0.5,
+  "max": 2.0,
+  "step": 0.1,
+  "default": 1.0
+ }
+}

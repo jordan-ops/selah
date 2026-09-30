@@ -1,0 +1,24 @@
+[[station]]
+name = "Capital FM London"
+url = "http://media-ice.musicradio.com/CapitalMP3"
+country = "The United Kingdom Of Great Britain And Northern Ireland"
+bitrate = 128
+codec = "MP3"
+tags = "pop"
+homepage = "http://www.capitalfm.com/london/"
+
+[[station]]
+name = "Capital FM"
+url = "http://5229.cloudrad.io:8316/;"
+country = "Uganda"
+bitrate = 128
+codec = "MP3"
+homepage = "http://capitalradio-ug.com/"
+
+[[station]]
+name = "100.3 KISS FM"
+url = "https://stream.revma.ihrhls.com/zc1629"
+country = "The United States Of America"
+codec = "AAC"
+tags = "pop,top 40"
+homepage = "https://1003kissfm.iheart.com/"

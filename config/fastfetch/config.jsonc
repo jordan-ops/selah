@@ -1,0 +1,76 @@
+{
+  // Selah-branded fastfetch: the Selah mark as an image.
+  //
+  // The source art (~/Downloads/selah.webp, and the 500x500 logo.png in the
+  // sddm theme) is a SQUARE canvas with the mark occupying only 22% x 30% of
+  // it -- real content is 112x150 px, aspect 1.34 (portrait). Fed in
+  // uncropped, a 30-column logo shows the mark at ~7 columns wide, so
+  // selah-logo.png here is CROPPED to the alpha bounds and upscaled 4x
+  // (448x600) purely to give the renderer detail to sample.
+  //
+  // SIZING — width/height are in CHARACTER CELLS, not pixels:
+  //     rows = cols * (img_px_height / img_px_width) / 2
+  // The /2 is the assumed character-cell aspect (a cell is about twice as
+  // tall as it is wide). For this 1.34-aspect mark that is
+  //     20 cols -> 13 rows      30 cols -> 20 rows
+  //     24 cols -> 16 rows      36 cols -> 24 rows
+  // So the ideal height at width 30 is ~20 ROWS (= 20 cells, not pixels).
+  //
+  // CAVEAT, measured not assumed: on this machine fastfetch ignored both
+  // `width` and `height` for image logos. width 10/20/30/40/50/60/80 all
+  // rendered 19 rows, and a 0.17-aspect and a 6.0-aspect test image both
+  // rendered 19 rows too -- identical numbers across the chafa, sixel and
+  // kitty types, i.e. they all fall back to the same renderer. Aspect ratio
+  // is therefore what actually matters here; the crop above is what makes it
+  // look right. If the mark comes out stretched, `fgOnly` or a terminal with
+  // real sixel/kitty support is the next lever, not `height`.
+  //
+  // NOTE: an explicit config REPLACES fastfetch's default module list
+  // (absent "modules" key = no modules), so the default structure is
+  // spelled out below verbatim from `fastfetch --gen-config`.
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    // chafa is the renderer a plain terminal can actually do; sixel/kitty
+    // need terminal support this machine doesn't advertise.
+    "type": "chafa",
+    "source": "/home/jordanzo/.config/fastfetch/selah-logo.png",
+    "width": 30,
+    "chafa": {
+      // TRUECOLOR keeps the mark's real colour instead of quantising it
+      // down to a 256-colour cube.
+      "canvasMode": "TRUECOLOR",
+      "colorSpace": "DIN99D"
+    }
+  },
+  "modules": [
+    "title",
+    "separator",
+    "os",
+    "host",
+    "kernel",
+    "uptime",
+    "packages",
+    "shell",
+    "display",
+    "de",
+    "wm",
+    "wmtheme",
+    "theme",
+    "icons",
+    "font",
+    "cursor",
+    "terminal",
+    "terminalfont",
+    "cpu",
+    "gpu",
+    "memory",
+    "swap",
+    "disk",
+    "localip",
+    "battery",
+    "poweradapter",
+    "locale",
+    "break",
+    "colors"
+  ]
+}

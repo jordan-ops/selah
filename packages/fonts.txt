@@ -1,0 +1,16 @@
+# Fonts the desktop actually depends on. Every entry is tried against the
+# official repos first (`pacman -Si`) and only falls through to yay when it
+# isn't there — so one list covers both without you splitting it up.
+ttf-dejavu
+ttf-liberation
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+adwaita-fonts
+
+# Nerd Font symbols: the bar's icons and the terminal glyphs. Everything
+# else in ~/.local/share/fonts was a personal library that never shipped.
+ttf-jetbrains-mono-nerd
+ttf-nerd-fonts-symbols
+ttf-nerd-fonts-symbols-mono
+ttf-cascadia-mono-nerd

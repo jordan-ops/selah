@@ -1,0 +1,33 @@
+#!/bin/bash
+# One-time setup for quickshell's lock screen (PamContext config: "qs-lock").
+# Writes /etc/pam.d/qs-lock — omarchy's proven faillock+unix chain minus
+# pam_systemd_home (no systemd-homed here) and minus nullok (don't allow
+# empty-password unlock on a lock screen).
+#
+# Until this has run, Super+L refuses to lock and notifies instead —
+# locking into a state with no way to authenticate would strand the session.
+
+set -euo pipefail
+
+if (( EUID == 0 )); then
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+else
+    echo "Needs root to write /etc/pam.d/qs-lock — re-running with sudo..."
+    exec sudo -- "$0" "$@"
+fi
+
+cat > /etc/pam.d/qs-lock <<'EOF'
+#%PAM-1.0
+auth       required                    pam_faillock.so preauth silent deny=10 unlock_time=120
+auth       [success=1 default=bad]     pam_unix.so try_first_pass
+auth       [default=die]               pam_faillock.so authfail deny=10 unlock_time=120
+auth       optional                    pam_permit.so
+auth       required                    pam_env.so
+auth       required                    pam_faillock.so authsucc
+account    include                     system-local-login
+EOF
+
+chmod 644 /etc/pam.d/qs-lock
+
+echo "Installed /etc/pam.d/qs-lock — quickshell lock screen can now authenticate."
+echo "Test it: press Super+L (or: qs ipc call lock lock)"

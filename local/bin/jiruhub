@@ -1,0 +1,9 @@
+#!/bin/sh
+# JiruHub launcher wrapper
+# JiruHub's Linux bundle ships without libquickjs_c_bridge_plugin.so, which
+# flutter_js needs to run extension JavaScript. Point it at the copy we
+# installed in the app's lib directory.
+APP_LIB="$HOME/.local/share/JiruHub/lib"
+export LIBQUICKJSC_PATH="$APP_LIB/libquickjs_c_bridge_plugin.so"
+export LD_LIBRARY_PATH="$APP_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$HOME/.local/share/JiruHub/jiruhub" "$@"

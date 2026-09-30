@@ -1,0 +1,12 @@
+{
+  "md3": {
+    "background": "#0B0C16",
+    "surface_variant": "#080910",
+    "secondary_container": "#151828",
+    "primary": "#82FB9C",
+    "on_background": "#ddf7ff",
+    "on_surface_variant": "#2d3450",
+    "error": "#50f872",
+    "outline": "#1f253a"
+  }
+}

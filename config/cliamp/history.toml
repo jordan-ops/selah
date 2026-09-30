@@ -1,0 +1,51 @@
+[[entry]]
+played_at = "2026-09-24T11:37:43Z"
+path = "http://media-ice.musicradio.com/CapitalMP3"
+title = "Capital FM London"
+genre = "pop"
+
+[[entry]]
+played_at = "2026-09-24T10:01:58Z"
+path = "http://5229.cloudrad.io:8316/;"
+title = "Capital FM"
+
+[[entry]]
+played_at = "2026-09-24T09:14:32Z"
+path = "https://stream.revma.ihrhls.com/zc1629"
+title = "100.3 KISS FM"
+genre = "pop,top 40"
+
+[[entry]]
+played_at = "2026-09-24T09:14:26Z"
+path = "http://stream.kissfm.de/kissfm-top40/mp3-128"
+title = "98.8 Kiss FM Top 40"
+
+[[entry]]
+played_at = "2026-09-24T09:14:06Z"
+path = "https://stream.revma.ihrhls.com/zc4257"
+title = "106.1 KISS FM Seattle"
+genre = "pop,top 40"
+
+[[entry]]
+played_at = "2026-09-24T08:44:01Z"
+path = "https://feeds.soundcloud.com/stream/2173081197-984capitalfm-taking-kenyas-tourism-story-global.mp3"
+title = "TAKING KENYA'S TOURISM STORY GLOBAL"
+artist = "Capital FM"
+album = "Capital FM"
+genre = "Music"
+duration_secs = 2632
+
+[[entry]]
+played_at = "2026-09-24T08:42:52Z"
+path = "https://radio.cliamp.stream/amiga/stream"
+title = "Amiga"
+
+[[entry]]
+played_at = "2026-09-24T08:42:49Z"
+path = "https://radio.cliamp.stream/chiptune/stream"
+title = "Chiptunes"
+
+[[entry]]
+played_at = "2026-09-24T08:42:37Z"
+path = "https://radio.cliamp.stream/omarchy/stream"
+title = "Omarchy"
