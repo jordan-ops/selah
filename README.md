@@ -178,9 +178,11 @@ a GitHub stall never hides a known-good result), and a new commit pops an
 **Update / Later** dialog on the focused screen.
 
 - **Update** runs `scripts/repo-update.sh` detached: `git pull --ff-only`
-  plus `./install.sh --skip-nvim`, so configs, links and new packages all
-  land — quickshell reloads itself mid-pull, and one notification confirms
-  when it finished.
+  plus `./install.sh --skip-nvim` — configs, links, scripts and the theme
+  land, quickshell reloads itself mid-pull, and one notification confirms
+  when it finished. Deliberately **no packages and no sudo**: if a deploy
+  adds packages to `packages/*.txt`, run `./install.sh --apps` yourself
+  afterwards (a sudo prompt can't be answered from a popup).
 - **Later** silences exactly that commit; the next push pops again.
 - A dirty working tree refuses the pull and says so instead of mixing your
   edits into the merge.
