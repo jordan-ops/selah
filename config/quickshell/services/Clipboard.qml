@@ -106,12 +106,26 @@ Singleton {
         }
     }
 
+    // `wl-paste --watch` outlives quickshell — it is reparented to init when
+    // we die — so every restart used to leak one more listener, and every
+    // leak fired its own capture per clipboard event. Sweep leftovers first,
+    // then start ours; the order is explicit because a reload can otherwise
+    // race the pkill against the watcher it is meant to precede. The orphan
+    // THIS session leaves behind is spared on purpose: it keeps writing the
+    // index while quickshell is down, until the next start sweeps it.
+    Process {
+        id: sweep
+        command: ["pkill", "-f", "wl-paste --watch"]
+        running: true
+        onExited: watcher.running = true
+    }
+
     // long-running capture; restart if it ever dies (only expected when
     // the wayland connection itself goes away)
     Process {
         id: watcher
         command: ["wl-paste", "--watch", root.watchScript]
-        running: true
+        running: false   // started by sweep, once the leftovers are gone
         onExited: restartTimer.start()
     }
     Timer { id: restartTimer; interval: 2000; onTriggered: watcher.running = true }
