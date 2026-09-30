@@ -61,7 +61,7 @@ active theme → astro plugin sync (skippable with `--skip-nvim`).
 The repo owns the real files; `~/.config` entries become pointers into it.
 
 ```
-~/.dotfiles/quickshell/Bar.qml     ← real bytes, the only copy
+~/.dotfiles/config/quickshell/Bar.qml  ← real bytes, the only copy
 ~/.config/quickshell/Bar.qml       ← arrow into the repo
 ```
 
