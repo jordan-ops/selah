@@ -36,7 +36,7 @@ Run one script and the whole desktop appears.
 └── state/quickshell/       # settings + current font/theme/gtk, seeded on first run
 ```
 
-Roughly **159 MB / 495 files** — almost all of it is theme wallpapers.
+Roughly **159 MB / 499 files** — almost all of it is theme wallpapers.
 
 ---
 
