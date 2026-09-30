@@ -23,3 +23,5 @@ config/nvim/.git/
 
 # ---- machine-local ----
 local/bin/gh
+# sddm drops this next to the linked greeter on every login
+local/share/sddm/wayland-session.log

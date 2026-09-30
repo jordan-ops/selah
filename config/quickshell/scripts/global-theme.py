@@ -30,6 +30,9 @@ import tomllib
 
 HOME = pathlib.Path.home()
 STATE = HOME / ".local/state/quickshell/generated"
+# The user's sticky GTK choice, recorded so it survives a machine that has
+# no dconf history yet (fresh install, or a theme applied from a TTY).
+GTK_STATE = HOME / ".local/state/quickshell/current-gtk-theme"
 POLICY_DEST = pathlib.Path("/etc/chromium/policies/managed/color.json")
 BROWSER_HELPER = "/usr/local/bin/set-browser-color"
 
@@ -406,15 +409,45 @@ def apply_chromium(p: dict):
 # ----------------------------------------------------------------- gsettings --
 
 def current_gtk_theme() -> str:
-    """The GTK theme currently configured (nwg-look / gsettings) — the
-    user's own choice, read before we overwrite anything."""
-    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
-        return ""
-    r = subprocess.run(
-        ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
-        capture_output=True, text=True,
-    )
-    return r.stdout.strip().strip("'\"") if r.returncode == 0 else ""
+    """The GTK theme the user picked (nwg-look / gsettings), read before we
+    overwrite anything — with a fallback, because a machine with no dconf
+    history must keep the choice instead of dropping to stock Adwaita.
+
+    Order: dconf (the live choice; empty when the key was never set), then
+    gsettings when dconf isn't around, then the recorded state file.
+    gsettings reports the *default* for an unset key rather than nothing,
+    so its answer only counts when it isn't that default."""
+    def record(val: str) -> str:
+        """Remember the choice so the next bare-TTY run reproduces it."""
+        GTK_STATE.parent.mkdir(parents=True, exist_ok=True)
+        GTK_STATE.write_text(val + "\n")
+        return val
+
+    session = bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS"))
+    if session and shutil.which("dconf"):
+        r = subprocess.run(
+            ["dconf", "read", "/org/gnome/desktop/interface/gtk-theme"],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            val = r.stdout.strip().strip("'\"")
+            if val:                       # set on purpose, stock included
+                return record(val)
+    elif session:
+        r = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            val = r.stdout.strip().strip("'\"")
+            if val and val not in ("Adwaita", "Default"):
+                return record(val)
+
+    if GTK_STATE.is_file():
+        val = GTK_STATE.read_text().strip()
+        if val:
+            return val
+    return ""
 
 
 def gtk_theme_name(p: dict, current: str) -> str:

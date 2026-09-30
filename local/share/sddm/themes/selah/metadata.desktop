@@ -1,0 +1,10 @@
+[SddmGreeterTheme]
+Name=Selah
+Type=sddm-theme
+Author=jordanzo
+Description=Selah branded greeter. Wallpaper and palette are generated into assets/ by quickshell/scripts/selah-sddm.sh sync, so the login screen follows the shell theme.
+License=MIT
+Version=1.0
+MainScript=Main.qml
+Theme-Id=selah
+Theme-API=2.0

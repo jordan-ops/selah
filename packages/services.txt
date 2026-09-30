@@ -1,0 +1,12 @@
+# Boot services this desktop needs — enabled by `install.sh --apps`.
+#
+# A fresh Arch install leaves all of these PRESET-DISABLED, so without this
+# file a clone of the repo would sit at a TTY: no SDDM login screen, no
+# NetworkManager, no firewall. Only `systemctl enable` is run — nothing is
+# started in the middle of an install, so doing this on a machine you are
+# sitting at changes nothing that is already running.
+#
+# Edit for other hardware (drop ufw, add yours).
+sddm
+NetworkManager
+ufw

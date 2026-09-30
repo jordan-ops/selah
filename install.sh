@@ -153,6 +153,37 @@ install_packages() {
     fi
 }
 
+# Boot services. A fresh Arch install leaves these PRESET-DISABLED, so a
+# clone of the repo would otherwise land at a TTY with no login manager.
+# Only `enable` — nothing is started mid-install, so on a machine you are
+# sitting at this changes nothing that is already running.
+enable_services() {
+    head1 "Boot services (enabled for next login, nothing started now)"
+    local svcs=() s
+    if ! command -v systemctl >/dev/null 2>&1; then
+        note "no systemctl — skipping"
+        return 0
+    fi
+    if ! command -v sudo >/dev/null 2>&1; then
+        note "no sudo — skipping"
+        return 0
+    fi
+    mapfile -t svcs < <(read_list "$REPO/packages/services.txt")
+    if [ "${#svcs[@]}" -eq 0 ]; then
+        note "packages/services.txt is empty — nothing to enable"
+        return 0
+    fi
+    for s in "${svcs[@]}"; do
+        if [ "$DRY" = 1 ]; then
+            dry "systemctl enable $s"
+        elif sudo systemctl enable "$s" >/dev/null 2>&1; then
+            note "enabled $s"
+        else
+            note "could not enable $s — run: sudo systemctl enable $s"
+        fi
+    done
+}
+
 link_configs() {
     head1 "Config symlinks"
     local d
@@ -167,6 +198,14 @@ link_configs() {
         link_one "$d" "$HOME/.local/bin/$(basename "$d")"
     done
     note "~/.local/bin is deliberately not on PATH — binds call these by full path."
+
+    # local/share carries the SDDM greeter's staged theme — linked the same
+    # way so the login screen ships with the repo instead of living in one
+    # home directory. (wayland-session.log lands here too: gitignored.)
+    for d in "$REPO"/local/share/*; do
+        [ -e "$d" ] || continue
+        link_one "$d" "$HOME/.local/share/$(basename "$d")"
+    done
 
     head1 "Wallpapers"
     run mkdir -p "$HOME/Wallpapers"
@@ -245,6 +284,27 @@ apply_theme() {
     run bash "$sh" "$theme" || note "switch-theme.sh failed (continuing)"
 }
 
+# SDDM greeter: the staged theme is linked from local/share/ above, but the
+# root copy (/usr/share/sddm/themes) and the /etc drop-in need sudo. Runs
+# only with --apps; the desktop itself doesn't depend on it — without it you
+# get Arch's stock greeter, and nothing restarts, so it's safe anywhere.
+install_greeter() {
+    [ "$DO_APPS" = 1 ] || return 0
+    local sh="$REPO/config/quickshell/scripts/selah-sddm.sh"
+    [ -f "$sh" ] || return 0
+    [ -d "$HOME/.local/share/sddm/themes/selah" ] || return 0
+    command -v sudo >/dev/null 2>&1 || return 0
+    head1 "SDDM greeter"
+    if [ "$DRY" = 1 ]; then
+        dry "sudo bash selah-sddm.sh set selah   (root copy + /etc/sddm.conf.d/selah.conf)"
+    elif sudo bash "$sh" set selah >/dev/null 2>&1; then
+        note "installed and set to 'selah' (live at next boot)"
+    else
+        note "could not install — run when you have sudo:"
+        note "  sudo bash ${sh/#$HOME/~} set selah"
+    fi
+}
+
 sync_nvim() {
     [ "$DO_NVM" = 1 ] || return 0
     command -v nvim >/dev/null 2>&1 || return 0
@@ -275,10 +335,11 @@ note "repo   ${REPO/#$HOME/~}"
 note "backup ${BACKUP/#$HOME/~}"
 [ "$DRY" = 1 ] && note "DRY RUN — nothing will be changed"
 
-[ "$DO_APPS" = 1 ] && install_packages
+[ "$DO_APPS" = 1 ] && { install_packages; enable_services; }
 [ "$DO_LINKS" = 1 ] && { link_configs; seed_state; }
 restore_appearance
 apply_theme
+install_greeter
 sync_nvim
 
 head1 "Done"
