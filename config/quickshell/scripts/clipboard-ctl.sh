@@ -11,7 +11,8 @@ index="$dir/index"
 entries="$dir/entries"
 
 exec 9>"$dir/.lock"
-flock 9 || exit 1
+# bounded like clipboard-watch.sh — a stuck capture must not hang a click
+flock -w 5 9 || exit 1
 
 case "$1" in
     remove)

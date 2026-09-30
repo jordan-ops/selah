@@ -11,6 +11,12 @@
 # The Clipboard service watches that index with FileView — the index IS
 # the persistence across restarts. flock keeps a single writer when a
 # capture races clipboard-ctl.sh.
+#
+# Bounds on the lock and its reads are deliberate: quickshell restarts leak
+# their `wl-paste --watch` children, and an orphan can hand us a pipe that
+# never EOFs. Unbounded, the first such capture held this lock for 25h and
+# every later event queued behind it (73 stuck processes by morning) — one
+# dropped entry is fine, a frozen history is not.
 
 dir="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/clipboard"
 entries="$dir/entries"
@@ -19,11 +25,13 @@ mkdir -p "$entries"
 umask 077
 
 exec 9>"$dir/.lock"
-flock 9 || exit 0
+flock -w 5 9 || exit 0
 
 ts=$(($(date +%s%N) / 1000000))
 tmp="$entries/.in.$ts"
-cat > "$tmp" || { rm -f "$tmp"; exit 0; }
+# bounded read: if the offer never arrives (orphaned watcher's dead pipe),
+# give the lock back instead of holding it forever
+timeout 5 cat > "$tmp" || { rm -f "$tmp"; exit 0; }
 
 # empty selection (watch fires with empty stdin too) — drop it
 [ -s "$tmp" ] || { rm -f "$tmp"; exit 0; }
@@ -35,8 +43,10 @@ if [ -f "$index" ] && cut -f3 "$index" | grep -qFx "$hash"; then
     exit 0
 fi
 
-# mime from the live offer (proxy for what the watch pipe chose)
-mime=$(wl-paste --list-types 2>/dev/null | sed -n '1p')
+# mime from the live offer (proxy for what the watch pipe chose) — bounded
+# too: this runs with the lock held, and a wedged wayland round-trip must
+# not become another 25h lock
+mime=$(timeout 3 wl-paste --list-types 2>/dev/null | sed -n '1p')
 mime=$(printf '%s' "$mime" | tr -d '\t\n\r')
 [ -n "$mime" ] || mime="application/octet-stream"
 
