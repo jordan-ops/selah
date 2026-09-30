@@ -54,10 +54,13 @@ cd ~/.dotfiles
 
 `--apps` passes `--needed` to both `pacman` and `yay`, so nothing you already
 have is reinstalled or downgraded. It bootstraps `yay` if it's missing, then
-**enables the boot services** in `packages/services.txt` — a fresh Arch leaves
-`sddm`, `NetworkManager` and `ufw` preset-disabled, so without that step you'd
-be at a TTY instead of a login screen — and finally installs the SDDM greeter's
-root copy (`selah-sddm.sh set selah`).
+asks one question before the AUR step — **NVIDIA drivers?** — defaulting to
+no, so a VM or a machine without old NVIDIA hardware never tries to build the
+legacy `nvidia-470xx` driver (a decline prints the exact `yay -S` command for
+later). It then **enables the boot services** in `packages/services.txt` — a
+fresh Arch leaves `sddm`, `NetworkManager` and `ufw` preset-disabled, so
+without that step you'd be at a TTY instead of a login screen — and finally
+installs the SDDM greeter's root copy (`selah-sddm.sh set selah`).
 
 Order of operations: packages → boot services → symlinks → wallpapers → state
 seeds → font → active theme → SDDM greeter → astro plugin sync (skippable with
@@ -140,7 +143,7 @@ Written for one machine, so a few things assume this user and hardware:
 | Thing | Note |
 |---|---|
 | `/home/jordanzo` in 4 files | `aether` blueprint (`kl.json`) + three `.aether-generated` provenance markers — cosmetic only: the saved palette still loads, and every marker rewrites itself on your next wallpaper pick. Nothing needs editing by hand — `selah-sddm.sh` resolves your home at runtime, `fastfetch` reads `~`, and `install.sh` retargets seeded state as it copies it. |
-| `packages/aur.txt` | `nvidia-470xx-dkms`/`-utils` are GPU-specific — trim them for other hardware (CachyOS/newer GPUs ship their own). Seven `*-debug` AUR entries were removed: purged upstream, and `yay -S` fails the whole batch on one unknown target. |
+| `packages/aur.txt` | `nvidia-470xx-dkms`/`-utils` are gated behind the installer's NVIDIA question (default no — right for VMs/new GPUs; a decline prints the `yay -S` command). Seven `*-debug` AUR entries were removed: purged upstream, and `yay -S` fails the whole batch on one unknown target. |
 | `monitors.lua` | `1920x1080@60.06Hz` on `output = ""` |
 | `autostart.lua` | starts `megasync` (your backups) |
 | `~/.local/bin` | deliberately not on `PATH` — hyprland binds call those by full path |

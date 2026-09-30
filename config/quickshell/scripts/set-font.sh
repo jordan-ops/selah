@@ -74,6 +74,18 @@ if [ -f "$INI" ]; then
   fi
 fi
 
+# GTK4 settings.ini — same single value, so GTK4 apps can't keep an older
+# family the picker already replaced (this is where DejaVu used to linger)
+INI4="$HOME/.config/gtk-4.0/settings.ini"
+if [ -f "$INI4" ]; then
+  if [ ! -f "$INI4.bak" ]; then cp -p "$INI4" "$INI4.bak"; fi
+  if grep -q '^gtk-font-name=' "$INI4"; then
+    sed -i "s/^gtk-font-name=.*/gtk-font-name=$FAMILY $SIZE/" "$INI4"
+  else
+    printf 'gtk-font-name=%s %s\n' "$FAMILY" "$SIZE" >> "$INI4"
+  fi
+fi
+
 # ---- kitty — single value, in place, first-touch .bak, nudge running
 # instances the way omarchy-font-set does (SIGUSR1 reloads the config)
 KITTY="$HOME/.config/kitty/kitty.conf"

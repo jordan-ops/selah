@@ -48,6 +48,8 @@ install.sh — build this desktop from a clone of the repo.
 Packages come from packages/official.txt (pacman), packages/aur.txt (yay) and
 packages/fonts.txt (tried against the official repos first, yay second). Lines
 starting with # and blank lines are ignored, so lists can carry notes.
+The AUR step asks one question first: do you need NVIDIA drivers? The
+default is no — right for VMs and machines without old NVIDIA hardware.
 EOF
     exit 0
 }
@@ -132,10 +134,30 @@ install_packages() {
 
     mapfile -t pkgs < <(read_list "$REPO/packages/aur.txt")
     if [ "${#pkgs[@]}" -gt 0 ] && command -v yay >/dev/null 2>&1; then
-        note "yay: ${#pkgs[@]} packages in packages/aur.txt"
-        note "(these are your machine's AUR set — nvidia-470xx-dkms and the"
-        note " *-debug entries are specific to it; edit the list for other HW)"
-        run yay -S --needed "${pkgs[@]}"
+        # NVIDIA is asked for, never assumed. The nvidia-470xx pair is a
+        # legacy GPU driver — a VM or a machine without old NVIDIA hardware
+        # must not even try to build it — so the answer defaults to no and
+        # a declined install prints the exact command to add it later.
+        local aur=() gpu=() p reply
+        for p in "${pkgs[@]}"; do
+            case "$p" in nvidia-*) gpu+=("$p") ;; *) aur+=("$p") ;; esac
+        done
+        if [ "${#gpu[@]}" -gt 0 ]; then
+            if [ "$DRY" = 1 ]; then
+                dry "ask: NVIDIA drivers needed? [y/N] -> ${gpu[*]}"
+            else
+                printf '    NVIDIA drivers (%s — legacy GPU only)? [y/N] ' "${gpu[*]}"
+                read -r reply || reply=""
+                case "$reply" in
+                    [Yy]*) aur+=("${gpu[@]}") ;;
+                    *)     note "no NVIDIA — add later with: yay -S ${gpu[*]}" ;;
+                esac
+            fi
+        fi
+        if [ "${#aur[@]}" -gt 0 ]; then
+            note "yay: ${#aur[@]} packages in packages/aur.txt"
+            run yay -S --needed "${aur[@]}"
+        fi
     fi
 
     # fonts: one list, routed by whether the official repos know the name
