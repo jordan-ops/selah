@@ -9,7 +9,7 @@
 // colors.json), so the greeter follows the shell theme; switch-theme.sh
 // runs that sync on every switch, and the installed copy refreshes
 // itself once the one-time sudo setup exists.
-import QtQuick
+import QtQuick 2.15   // versioned: the greeter runs Qt5 (sddm-greeter → libQt5Quick), which rejects versionless imports
 import "assets/vars.js" as V
 
 Rectangle {
