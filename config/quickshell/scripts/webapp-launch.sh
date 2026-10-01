@@ -60,4 +60,23 @@ if [ -z "$bin" ]; then
     exit 1
 fi
 
+# Ctrl+D video downloader: webapp windows carry the selah-video-dl
+# extension, so pressing Ctrl+D on a playing video saves it into
+# ~/Videos (see ~/.local/share/selah-video-dl/). --load-extension only
+# applies to the process that STARTS the browser - if a plain chromium is
+# already running, this launch silently attaches to it without the
+# extension, so warn instead of leaving Ctrl+D mysteriously dead.
+ext_dir="$HOME/.local/share/selah-video-dl/extension"
+if [ -d "$ext_dir" ]; then
+    if pgrep -x chromium >/dev/null 2>&1 || pgrep -f '/chromium[ ]' >/dev/null 2>&1; then
+        if ! pgrep -af chromium | grep -q -- '--load-extension=[^ ]*selah-video-dl'; then
+            notify-send -u normal -a Selah -i dialog-warning \
+                "Ctrl+D downloads unavailable" \
+                "Chromium is running without the download extension. Fully quit it, then reopen the webapp." \
+                >/dev/null 2>&1 || true
+        fi
+    fi
+    exec "$bin" --app="$url" --load-extension="$ext_dir" "$@"
+fi
+
 exec "$bin" --app="$url" "$@"
