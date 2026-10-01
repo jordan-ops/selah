@@ -230,13 +230,29 @@ link_configs() {
     done
     note "~/.local/bin is deliberately not on PATH — binds call these by full path."
 
-    # local/share carries the SDDM greeter's staged theme — linked the same
-    # way so the login screen ships with the repo instead of living in one
-    # home directory. (wayland-session.log lands here too: gitignored.)
+    # local/share carries the SDDM greeter's staged theme and the Ctrl+D
+    # video downloader — linked the same way so both ship with the repo
+    # instead of living in one home directory. (wayland-session.log lands
+    # here too: gitignored.)
     for d in "$REPO"/local/share/*; do
         [ -e "$d" ] || continue
         link_one "$d" "$HOME/.local/share/$(basename "$d")"
     done
+
+    # Two downloader files cannot ride that directory link: chromium reads
+    # native-messaging hosts from a fixed path, and
+    # ~/.local/share/applications must keep the user's own desktop entries —
+    # only the override itself is linked.
+    if [ -f "$REPO/local/share/selah-video-dl/selah_video_downloader.json" ]; then
+        run mkdir -p "$HOME/.config/chromium/NativeMessagingHosts"
+        link_one "$REPO/local/share/selah-video-dl/selah_video_downloader.json" \
+            "$HOME/.config/chromium/NativeMessagingHosts/selah_video_downloader.json"
+    fi
+    if [ -f "$REPO/local/share/selah-video-dl/chromium.desktop" ]; then
+        run mkdir -p "$HOME/.local/share/applications"
+        link_one "$REPO/local/share/selah-video-dl/chromium.desktop" \
+            "$HOME/.local/share/applications/chromium.desktop"
+    fi
 
     head1 "Wallpapers"
     run mkdir -p "$HOME/Wallpapers"
