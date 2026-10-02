@@ -7,6 +7,14 @@
 hl.env("XCURSOR_SIZE", "20")
 hl.env("HYPRCURSOR_SIZE", "20")
 
+-- Qt apps (qBittorrent, megasync, android-file-transfer, ...) load the
+-- qt5ct/qt6ct platform themes: the colon list lets each Qt major pick
+-- the plugin it knows. Both are set up to follow the GTK side —
+-- switch-theme.sh regenerates colors/selah.conf from colors.toml, plus
+-- the Yaru-sage-dark icon theme and the JetBrainsMono font.
+-- https://wiki.archlinux.org/title/Qt
+hl.env("QT_QPA_PLATFORMTHEME", "qt5ct:qt6ct")
+
 
 -----------------------
 ----- PERMISSIONS -----

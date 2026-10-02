@@ -15,6 +15,8 @@ __pycache__/
 config/hypr/colors.lua
 config/kitty/current-theme.conf
 config/gtk-3.0/theme.css
+config/qt6ct/colors/selah.conf
+config/qt5ct/colors/selah.conf
 
 # ---- nested clone: AstroNvim template's own repo ----
 # Stays on disk (so :AstroUpdate keeps working) but is never committed

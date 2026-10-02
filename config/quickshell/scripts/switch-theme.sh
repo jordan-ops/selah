@@ -12,23 +12,28 @@ fi
 mkdir -p "$HOME/.local/state/quickshell"
 printf '%s\n' "$THEME" > "$HOME/.local/state/quickshell/current-theme"
 
-# omarchy themes ship colors.toml, not a ready-made quickshell colors.json —
-# derive one (the md3 keys services/Colors.qml reads) before the copy loop
-# below ships it to the generated state file. Cached per theme: only
-# regenerate when colors.toml is newer than the derived file, so re-switching
-# a theme skips the python pass entirely (omarchy caches everything it can
-# between switches).
+# omarchy themes ship colors.toml, not ready-made derived configs —
+# derive quickshell's colors.json (the md3 keys services/Colors.qml
+# reads) and qt5ct/qt6ct's selah scheme (toml2qtpalette.py) before the
+# copy loop below ships them. Cached per theme: only regenerate when
+# colors.toml is newer than a derived file or the file is missing, so
+# re-switching a theme skips the python passes entirely (omarchy caches
+# everything it can between switches).
 if [ -f "$SRC/colors.toml" ] && {
-    [ ! -f "$SRC/quickshell/colors.json" ] || [ "$SRC/colors.toml" -nt "$SRC/quickshell/colors.json" ]
+    [ ! -f "$SRC/quickshell/colors.json" ] || [ "$SRC/colors.toml" -nt "$SRC/quickshell/colors.json" ] ||
+    [ ! -f "$SRC/quickshell/qtcolors.conf" ]
 }; then
     mkdir -p "$SRC/quickshell"
     python3 "$HOME/.config/quickshell/scripts/toml2colors.py" \
         "$SRC/colors.toml" "$SRC/quickshell/colors.json" || true
+    python3 "$HOME/.config/quickshell/scripts/toml2qtpalette.py" \
+        "$SRC/colors.toml" "$SRC/quickshell/qtcolors.conf" || true
 fi
 
 # source subfolder -> real destination file
 declare -A TARGETS=(
     [quickshell/colors.json]="$HOME/.local/state/quickshell/generated/colors.json"
+    [quickshell/qtcolors.conf]="$HOME/.config/qt6ct/colors/selah.conf"
     [kitty/theme.conf]="$HOME/.config/kitty/current-theme.conf"
     [GTK/theme.css]="$HOME/.config/gtk-3.0/theme.css"
     [hypr/colors.lua]="$HOME/.config/hypr/colors.lua"
@@ -53,6 +58,15 @@ done
 if [ -f "$SRC/GTK/theme.css" ]; then
     mkdir -p "$HOME/.config/gtk-4.0"
     ln -sf "$HOME/.config/gtk-3.0/theme.css" "$HOME/.config/gtk-4.0/theme.css"
+fi
+
+# qt5ct reads the same 21-slot scheme as qt6ct (its loader wants exactly
+# NColorRoles entries, qt6ct derives Accent from Highlight itself), so
+# share one file instead of keeping two copies in sync — same trick as
+# gtk-4.0/theme.css above.
+if [ -f "$SRC/quickshell/qtcolors.conf" ]; then
+    mkdir -p "$HOME/.config/qt5ct/colors"
+    ln -sf "$HOME/.config/qt6ct/colors/selah.conf" "$HOME/.config/qt5ct/colors/selah.conf"
 fi
 
 # point quickshell's background window at this theme's default wallpaper —
