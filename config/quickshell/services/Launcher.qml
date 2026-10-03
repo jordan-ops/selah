@@ -28,8 +28,89 @@ Singleton {
 
     // typing rebuilds `results` — snap the selection back to the top so the
     // pill always has a row to land on (a stale index past the new result
-    // count would leave nothing selected at all)
-    onQueryChanged: selectedIndex = 0
+    // count would leave nothing selected at all) and re-run the calculator
+    // attempt for the new query
+    onQueryChanged: {
+        selectedIndex = 0
+        maybeCalc(query.trim().toLowerCase())
+    }
+
+    // --- calculator --------------------------------------------------------
+    // Math-shaped queries get an answer row on top (see results below).
+    // Evaluation runs in scripts/calc.py — python3 AST whitelist, never
+    // eval'd in QML. calcPending remembers which expression the running
+    // process was asked for so a slow run can't post its answer under a
+    // newer query.
+    property string calcExpr: ""
+    property string calcPending: ""
+    property string calcValue: ""
+
+    function looksMath(t) {
+        if (t.length < 2 || t.length > 60) return false
+        if (!/^[\d\s().+\-*/%^]+$/.test(t)) return false
+        if (!/\d/.test(t)) return false
+        // the operator must sit between two operands — "-5" alone is a
+        // number, not a calculation, and must not spawn a calc row
+        return /[\d)]\s*[-+*/%^]\s*[\d(]/.test(t)
+    }
+
+    function maybeCalc(t) {
+        if (!looksMath(t)) {
+            calcExpr = ""
+            calcValue = ""
+            if (calcProc.running) calcProc.running = false
+            return
+        }
+        if (t === calcPending) return
+        calcExpr = t
+        calcValue = ""
+        calcProc.running = false
+        calcProc.command = ["python3", Quickshell.shellPath("scripts/calc.py"), t]
+        calcPending = t
+        calcProc.running = true
+    }
+
+    Process {
+        id: calcProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const v = text.trim()
+                if (v !== "" && root.calcPending === root.calcExpr)
+                    root.calcValue = v
+            }
+        }
+        onExited: exitCode => {
+            if (exitCode !== 0 && root.calcPending === root.calcExpr)
+                root.calcValue = ""
+        }
+    }
+
+    // settings.json arrays — edit the file or drive it via
+    // `qs ipc call settings set launcher.fav '["firefox"]'`
+    function strList(key) {
+        const v = Settings.values[key]
+        return Array.isArray(v) ? v : []
+    }
+
+    // desktop ids (or display names) pinned to the top of app results
+    function isFav(d) {
+        const id = (d.id || "").toLowerCase()
+        const nm = (d.name || "").toLowerCase()
+        return strList("launcher.fav").some(x => {
+            const s = String(x).trim().toLowerCase()
+            return s !== "" && (s === id || s === nm)
+        })
+    }
+
+    // desktop ids (or display names) that never appear at all
+    function isHidden(d) {
+        const id = (d.id || "").toLowerCase()
+        const nm = (d.name || "").toLowerCase()
+        return strList("launcher.hidden").some(x => {
+            const s = String(x).trim().toLowerCase()
+            return s !== "" && (s === id || s === nm)
+        })
+    }
 
     // deletion (model churn) can shrink the list under the selection just
     // as easily — keep the index inside the model so the pill always has a
@@ -95,35 +176,50 @@ Singleton {
             || { name: "Setting", icon: "preferences-system" }
     }
 
+    // ">" scopes the search to the settings CATALOG ONLY — the catalog
+    // used to sit above every app hit, which buried apps under settings
+    // rows on every keystroke. Bare ">" browses the whole catalog (first
+    // 20 rows); a plain query never shows settings at all anymore.
     readonly property var results: {
     const q = query.trim().toLowerCase()
 
-    // settings are first-class results: the catalog itself is the index
-    // (omasettings' lesson — no second list to maintain), matches sit
-    // above app hits and deep-link into the window on page + row.
-    const settings = q === "" ? [] : SettingsCatalog.entries.filter(e => {
-        const hay = [e.label, e.description, e.keywords, pageMeta(e.page).name]
-            .filter(Boolean).join(" ").toLowerCase()
-        return q.split(/\s+/).every(t => hay.includes(t))
-    }).slice(0, 8).map(e => ({
-        name: e.label,
-        comment: pageMeta(e.page).name + " — " + (e.description || "Setting"),
-        icon: pageMeta(e.page).icon,
-        execute: () => SettingsApp.show(e.page, e.id)
-    }))
+    if (q.startsWith(">")) {
+        const s = q.slice(1).trim()
+        return SettingsCatalog.entries.filter(e => {
+            const hay = [e.label, e.description, e.keywords, pageMeta(e.page).name]
+                .filter(Boolean).join(" ").toLowerCase()
+            return s === "" || s.split(/\s+/).every(t => hay.includes(t))
+        }).slice(0, s === "" ? 20 : 40).map(e => ({
+            name: e.label,
+            comment: pageMeta(e.page).name + " — " + (e.description || "Setting"),
+            icon: pageMeta(e.page).icon,
+            execute: () => SettingsApp.show(e.page, e.id)
+        }))
+    }
 
+    // plain query → installed apps only (hidden filtered out, favourites
+    // float to the top, then alphabetical)
     const apps = [...DesktopEntries.applications.values]
-        .filter(d => d.name)
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .filter(d => d.name && !isHidden(d))
         .filter(d => {
             if (q === "") return true
             const name = (d.name || "").toLowerCase()
             const comment = (d.comment || "").toLowerCase()
             return name.includes(q) || comment.includes(q)
         })
+        .sort((a, b) => (isFav(a) ? 0 : 1) - (isFav(b) ? 0 : 1)
+            || a.name.localeCompare(b.name))
         .slice(0, q === "" ? 50 : 40)
 
-    return [...settings, ...apps]
+    if (calcValue !== "" && calcExpr === q)
+        return [{
+            name: "= " + calcValue,
+            comment: "calculated — Enter copies the answer",
+            icon: "accessories-calculator",
+            execute: () => Quickshell.execDetached(["wl-copy", calcValue])
+        }, ...apps]
+
+    return apps
 }
 
     function openLauncher() {
@@ -160,10 +256,19 @@ Singleton {
             else root.openLauncher()
         }
         // same shape as tray count / clipboard count: how many apps the
-        // launcher can actually see. Doubles as the check that a freshly
-        // created .desktop has been picked up (it only changes on restart).
+        // launcher can actually SEE — hidden-listed ids don't count, so
+        // it doubles as the check that a freshly created .desktop has
+        // been picked up (it only changes on restart).
         function count(): string {
-            return String(DesktopEntries.applications.values.length)
+            return String(DesktopEntries.applications.values
+                .filter(d => !root.isHidden(d)).length)
+        }
+        // prefill the search box from scripts/tests — opens the launcher
+        // first so the results pill renders (set the text field too when
+        // it exists, so field and results agree)
+        function search(q: string): void {
+            if (!root.open) root.openLauncher()
+            root.query = q
         }
     }
 }

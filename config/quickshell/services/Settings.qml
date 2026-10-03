@@ -76,5 +76,16 @@ Singleton {
         function get(key: string): string {
             return String(root.get(key, ""))
         }
+        // Arrays can't ride `set`: `qs ipc call` SPREADS json-array
+        // arguments, so `set k '["a"]'` hands over each element (or
+        // nothing at all for '[]' — "too few arguments"). This variant
+        // takes the payload quote-wrapped — '"[\"a\"]"' parses to a
+        // STRING at the cli, passes through as ONE argument — and
+        // unwraps the extra json layer before the store parses again.
+        // Clearing: qs ipc call settings setList launcher.hidden '"[]"'
+        function setList(key: string, value: string): void {
+            try { root.set(key, JSON.parse(value)) }
+            catch (e) { console.log("settings setList:", key, e) }
+        }
     }
 }

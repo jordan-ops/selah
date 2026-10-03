@@ -232,6 +232,19 @@ Singleton {
             { label: "Fullscreen", hyprKey: "decoration:fullscreen_opacity", min: 50, max: 100, step: 1, scale: 0.01, suffix: "%" } ],
           keywords: "opacity transparency active inactive focused unfocused fullscreen window" },
 
+        { id: "apPanelAlpha", page: "appearance", type: "choice", source: "settings",
+          key: "appearance.transparency",
+          label: "Panel transparency",
+          description: "How much wallpaper shows through the bar pill, control center, settings window and aether picker",
+          // NUMBERS on purpose: Settings.set() JSON-parses whatever it
+          // gets, so "30" would land as the number 30 and the chips'
+          // strict === against a string model value never matched
+          options: [ { value: 0,  label: "Opaque" },
+                     { value: 15, label: "15%" },
+                     { value: 30, label: "30%" },
+                     { value: 45, label: "45%" } ],
+          keywords: "transparency transparent alpha panel pill bar control center settings glass see through" },
+
         { id: "apScreensaver", page: "appearance", type: "info", value: "—",
           label: "Screensaver",
           description: "Text/Image/Reset branding · needs omasettings menu run style.screensaver.*",

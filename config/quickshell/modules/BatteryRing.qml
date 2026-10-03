@@ -33,6 +33,35 @@ Item {
         return Services.Colors.text
     }
 
+    // ---- charge pulse: the visual replacement for the removed
+    // "Charging" notification. Charging's rising edge runs one 0→1→0
+    // wave (~700ms): the whole chip pops slightly and the canvas lays a
+    // thickened fill + accent halo over the arc (painted from this
+    // value). Skipped under reduced motion — the fill colour flipping to
+    // the accent already tells you it's plugged in.
+    property real chargePulse: 0
+    scale: 1 + chargePulse * 0.15
+
+    SequentialAnimation {
+        id: chargePulseAnim
+        NumberAnimation {
+            target: root; property: "chargePulse"
+            from: 0; to: 1; duration: 320
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Services.Motion.emphasizedDecelerate
+        }
+        NumberAnimation {
+            target: root; property: "chargePulse"
+            from: 1; to: 0; duration: 380
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Services.Motion.standardCurve
+        }
+    }
+    onChargingChanged: {
+        if (charging && Services.Motion.motionOn)
+            chargePulseAnim.restart()
+    }
+
     Canvas {
         id: canvas
         anchors.fill: parent
@@ -69,12 +98,34 @@ Item {
                 ctx.arc(cx, cy, r, s, rad(root.startDeg - root.sweepDeg * root.level / 100), true)
                 ctx.stroke()
             }
+
+            // charge pulse layer — rides ON TOP of the static strokes
+            // while chargePulse waves (thickened fill + accent halo),
+            // so nothing else repaints differently mid-pulse
+            if (root.chargePulse > 0.01 && root.level > 0) {
+                const arc = () => {
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, s, rad(root.startDeg - root.sweepDeg * root.level / 100), true)
+                }
+                ctx.lineWidth = sw + root.chargePulse * 3
+                ctx.strokeStyle = root.fillColor
+                arc()
+                ctx.stroke()
+
+                const a = Services.Colors.accent
+                ctx.lineWidth = sw + 6
+                ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, 0.35 * root.chargePulse)
+                arc()
+                ctx.stroke()
+            }
         }
     }
 
-    // repaint triggers: level, battery color state, theme switches
+    // repaint triggers: level, battery color state, theme switches,
+    // and the charge pulse wave above
     onLevelChanged: canvas.requestPaint()
     onFillColorChanged: canvas.requestPaint()
+    onChargePulseChanged: canvas.requestPaint()
     Component.onCompleted: canvas.requestPaint()
     Connections {
         target: Services.Colors

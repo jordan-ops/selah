@@ -29,6 +29,16 @@ Singleton {
     property var wallpapers: []   // absolute file paths for the active theme
     property int selectedIndex: 0
 
+    // Category filter, structure derived from the theme's backgrounds
+    // folder: every image the scan found (allFiles), the immediate
+    // subfolders they live in (categories), and the active chip.
+    // category "all" shows everything; a subfolder name narrows to that
+    // folder. Flat theme dirs — every shipped theme today — yield no
+    // categories and the pill renders no chip row at all.
+    property var allFiles: []
+    property var categories: []
+    property string category: "all"
+
     // the wallpaper actually on screen (rendered by Background.qml) —
     // plain-path state file, same idea as Colors.qml's colors.json.
     // previous/previousOpacity drive the crossfade between the two.
@@ -45,10 +55,45 @@ Singleton {
         : ""
 
     function scan() {
-        if (root.themeDir === "") { root.wallpapers = []; return }
+        if (root.themeDir === "") {
+            root.allFiles = []; root.categories = []; root.wallpapers = []
+            return
+        }
+        // depth 2: images straight in backgrounds/ and images inside one
+        // level of category subfolders
         scanProc.command = ["bash", "-c",
-            "find '" + root.themeDir + "' -maxdepth 1 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\) | sort"]
+            "find '" + root.themeDir + "' -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\) | sort"]
         scanProc.running = true
+    }
+
+    // Rebuild categories + the visible list from allFiles — pure JS, so a
+    // chip switch is instant (no re-scan). The active category is
+    // invalidated first: after a theme switch "nature" may not exist any
+    // more and the list would silently go empty.
+    function recompute() {
+        const dir = root.themeDir
+        const cats = []
+        for (let i = 0; i < root.allFiles.length; i++) {
+            const rel = root.allFiles[i].slice(dir.length + 1)   // drop "<dir>/"
+            const slash = rel.indexOf("/")
+            if (slash > 0 && !cats.includes(rel.slice(0, slash)))
+                cats.push(rel.slice(0, slash))
+        }
+        cats.sort((a, b) => a.localeCompare(b))
+        root.categories = cats
+        if (root.category !== "all" && !cats.includes(root.category))
+            root.category = "all"
+        root.wallpapers = root.category === "all" ? root.allFiles
+            : root.allFiles.filter(p => p.startsWith(dir + "/" + root.category + "/"))
+        // land the hero on the wallpaper actually set — or the first
+        // entry when the active one isn't part of this view (this used
+        // to open on a random file after a theme swap mid-open)
+        root.selectedIndex = Math.max(0, root.wallpapers.indexOf(root.current))
+    }
+
+    function setCategory(c) {
+        root.category = (c === "all" || root.categories.includes(c)) ? c : "all"
+        root.recompute()
     }
 
     function openPicker() {
@@ -116,13 +161,13 @@ Singleton {
         id: scanProc
         stdout: StdioCollector {
             onStreamFinished: {
-                root.wallpapers = text.split("\n").filter(t => t.length > 0)
-                // picker open while the list swapped under it (switched
-                // theme, then reopened fast): re-land the hero on the
-                // active wallpaper — an index into the OLD theme's list
-                // means nothing here (this used to open on a random file)
-                if (root.open)
-                    root.selectedIndex = Math.max(0, root.wallpapers.indexOf(root.current))
+                root.allFiles = text.split("\n").filter(t => t.length > 0)
+                // recompute() re-derives categories/list AND re-lands the
+                // hero on the active wallpaper — an index into the OLD
+                // theme's list means nothing after a swap (this used to
+                // open on a random file when the picker was open during
+                // the switch)
+                root.recompute()
                 root.maybeBootstrap()
             }
         }
@@ -181,6 +226,9 @@ Singleton {
         function toggle(): void { root.toggle() }
         // for scripts / hypr binds: qs ipc call wallpaper set /path/to.jpg
         function set(path: string): void { root.apply(path) }
+        // category chips: what exists, switch one
+        function categories(): string { return JSON.stringify(root.categories) }
+        function setCategory(name: string): void { root.setCategory(name) }
     }
 
     Component.onCompleted: scan()

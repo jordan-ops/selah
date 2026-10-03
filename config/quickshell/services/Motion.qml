@@ -82,9 +82,13 @@ Singleton {
     //                     Measured at both ends + middle (tst_anim2): the
     //                     overshoot bands hold; 2× inflates them ~2×, so
     //                     the knob stops at 1.5.
+    // game mode joins the user's switch: hyprland's animations die with
+    // it, so quickshell's go quiet too (services/GameMode.qml explains
+    // the restore). The settings.json preference itself stays untouched
+    // — motion.enabled comes back the moment game mode drops.
     readonly property bool motionOn: {
         const v = Settings.values["motion.enabled"]
-        return !(v === false || v === "false")
+        return !(v === false || v === "false") && !GameMode.enabled
     }
     readonly property real speedScale: {
         const v = Settings.values["motion.speedScale"]

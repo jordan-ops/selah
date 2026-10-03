@@ -66,7 +66,9 @@ Variants {
         WlrLayershell.namespace: "aether-picker"
 
         readonly property var aether: Services.Aether
-        readonly property color bg: Services.Colors.background
+        // panel = background alpha'd by appearance.transparency (the
+        // full-screen overlay still blocks clicks, only the paint thins)
+        readonly property color bg: Services.Colors.panel
         readonly property color fg: Services.Colors.text
         readonly property color dim: Services.Colors.textMuted
         readonly property color accent: Services.Colors.accent

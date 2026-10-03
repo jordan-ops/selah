@@ -222,13 +222,16 @@ Variants {
             // arbitrary height threshold, so it's obvious which is which.
             // "power" joined this list once its swatches grew from 36px
             // circles to 64px squares — tall enough now to have the same
-            // problem. "controlcenter" joins for the same reason — 380px tall.
+            // problem. "controlcenter" joins for the same reason — 440px tall.
             readonly property bool tallMode: mode === "launcher" || mode === "theme" || mode === "notif" || mode === "power" || mode === "controlcenter" || mode === "wallpaper" || mode === "clock" || mode === "clipboard" || mode === "polkit" || mode === "media" || mode === "updates" || mode === "recording"
             readonly property real morphRadius: tallMode ? 18 : height / 2
             bottomLeftRadius: morphRadius
 	    bottomRightRadius: morphRadius
             // color:"#282828"
-            color: Services.Colors.background
+            // panel = same colour, alpha from appearance.transparency —
+            // this rectangle is the surface for EVERY pill mode, so it
+            // is the one that must let the wallpaper through
+            color: Services.Colors.panel
 
             property bool osdVisible: false
             property string osdType: "volume"
@@ -282,6 +285,19 @@ Variants {
             // popup's own hover, which is what a down-chevron next to the
             // status module actually promises.
             property bool trayOpen: false
+
+            // tray.hidden in settings.json — an array of StatusNotifier ids
+            // (`qs ipc call tray ids` prints the ones currently registered,
+            // `qs ipc call settings set tray.hidden '["id1","id2"]'` hides
+            // them). Listed icons never render: not in the popup row, not
+            // in its width, and the row reads empty if every icon is hidden.
+            readonly property var trayHidden: {
+                const v = Services.Settings.values["tray.hidden"]
+                return Array.isArray(v)
+                    ? v.map(x => String(x).trim().toLowerCase()) : []
+            }
+            readonly property var trayItems: SystemTray.items.values
+                .filter(it => !trayHidden.includes(String(it.id).trim().toLowerCase()))
 
             // Hover never closes on its own — it only opens and (re)arms
             // trayIdle. Dismissal is the timer's job, and that is what buys
@@ -384,8 +400,12 @@ Variants {
             // picker (PillWallpaperContent) — height comes from
             // Services.Themes.geom so one setSize switch (1/2/3) keeps
             // both pills identical: hero + two vertical-rect peeks + label.
+            // +22 for the category chip row, but only when the theme's
+            // backgrounds folder actually HAS subfolders to chip — flat
+            // dirs keep the old height to the pixel.
             function wallpaperStripHeight() {
                 return Services.Themes.geom.listH
+                    + (Services.Wallpapers.categories.length > 0 ? 22 : 0)
             }
 
             // restStyle "compact" AND not hover-expanded = the tiny capsule
@@ -460,7 +480,7 @@ Variants {
                 launcher:     () => Qt.size(360, 12 + 30 + 8 + pill.confirmOverlayHeight() + 12),
                 theme:        () => Qt.size(Services.Themes.geom.pillW, 24 + pill.themeGridHeight()),
                 wallpaper:    () => Qt.size(Services.Themes.geom.pillW, 24 + pill.wallpaperStripHeight()),
-                controlcenter:() => Qt.size(760, 380),
+                controlcenter:() => Qt.size(760, 440),
                 clock:        () => Qt.size(620, 520),
                 osd:          () => Qt.size(220, 35),
                 notif:        () => Qt.size(420, Math.max(35, notificationContent.implicitHeight + 22)),
@@ -1112,6 +1132,23 @@ Variants {
                         anchors.verticalCenter: parent.verticalCenter
                         onTextChanged: Services.Launcher.query = text
 
+                        // placeholder: TextInput has no placeholderText of
+                        // its own, so it's a zero-hit child painted over the
+                        // text origin — clicks fall through to the input.
+                        // Spells out the two query languages: plain text is
+                        // apps only, ">" switches to the settings catalog,
+                        // and a math expression gets an answer row on top.
+                        Text {
+                            font.family: Services.Fonts.family
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: searchField.text === ""
+                            text: "apps — \">\" settings — or type math"
+                            color: Services.Colors.text
+                            opacity: 0.45
+                            font.pixelSize: 14
+                        }
+
                         Keys.onPressed: (event) => {
                             // The delete confirm is modal: while it is up,
                             // every key belongs to it — typing included, so
@@ -1161,7 +1198,11 @@ Variants {
                     color: Services.Colors.text
                     opacity: 0.6
                     font.pixelSize: 12
-                    text: "No results"
+                    // ">" queries can only ever match settings rows, plain
+                    // queries only apps — name the right haystack
+                    text: Services.Launcher.query.trim().startsWith(">")
+                        ? "No settings match"
+                        : "No apps match"
                 }
 
                 ListView {
@@ -1453,7 +1494,7 @@ Variants {
             }
 
             // Control center folded in the same way — ControlCenterPanel is
-            // already a self-contained 760x380 component (draws its own
+            // already a self-contained 760x440 component (draws its own
             // background/radius), so no extraction needed, just center it
             // and gate its opacity by mode like everything else here.
             Item {
@@ -2384,13 +2425,20 @@ Variants {
 
         // same trick for the tray popup — the whole feature is hover-driven,
         // so this is the only way to exercise it without a pointer:
-        //   qs ipc call tray open / close / isOpen / count
+        //   qs ipc call tray open / close / isOpen / count / ids
         IpcHandler {
             target: "tray"
             function open(): void { pill.trayTouch() }
             function close(): void { pill.trayOpen = false }
             function isOpen(): bool { return pill.trayOpen }
-            function count(): int { return SystemTray.items.values.length }
+            // VISIBLE count — honours the tray.hidden list (raw registry
+            // size lives in ids().length)
+            function count(): int { return pill.trayItems.length }
+            // every tray id currently registered — discovery aid for
+            // building the tray.hidden list
+            function ids(): string {
+                return JSON.stringify(SystemTray.items.values.map(it => it.id))
+            }
         }
 
         // ---------------- tray popup (Meet-style bounce) ----------------
@@ -2483,7 +2531,9 @@ Variants {
                     font.family: Services.Fonts.family
                     id: trayEmptyHint
                     anchors.centerIn: parent
-                    visible: SystemTray.items.values.length === 0
+                    // hidden-by-config icons don't count — the popup says
+                    // "No tray apps" when tray.hidden buries all of them
+                    visible: pill.trayItems.length === 0
                     text: "No tray apps"
                     font.pixelSize: 11
                     color: Services.Colors.textMuted
@@ -2525,12 +2575,14 @@ Variants {
                     id: trayRow
                     anchors.centerIn: parent
                     // mutually exclusive with trayEmptyHint — both are
-                    // centre-anchored, so if both showed they'd overlap
-                    visible: SystemTray.items.values.length > 0
+                    // centre-anchored, so if both showed they'd overlap.
+                    // Both sides count pill.trayItems (raw list minus the
+                    // tray.hidden ids), never the raw registry.
+                    visible: pill.trayItems.length > 0
                     spacing: 2
 
                     Repeater {
-                        model: SystemTray.items
+                        model: pill.trayItems
 
                         delegate: Item {
                             id: trayIconItem
@@ -2676,11 +2728,15 @@ Variants {
             // pill.y (top of the pill), not pill.height + 4 (below the whole
             // pill). Every other popup wants "below the pill" since the pill
             // is short for their triggers (osd/rest height). Control center
-            // is different: the pill itself IS the 380px-tall panel now, so
+            // is different: the pill itself IS the 440px-tall panel now, so
             // "below it" meant "below the entire panel", landing at the
             // bottom instead of running alongside it.
             anchor.rect.y: pill.y
             implicitWidth: 260
+            // matches ControlCenterAdvanced's own 380px card, NOT the
+            // pill's 440 — the window follows the CONTENT (advSizer is
+            // centerIn + content-sized), so matching the pill would just
+            // add transparent bands that eat desktop clicks beside it
             implicitHeight: 380
             color: "transparent"
 

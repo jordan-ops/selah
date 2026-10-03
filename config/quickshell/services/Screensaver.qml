@@ -25,7 +25,11 @@ Singleton {
     IdleMonitor {
         timeout: root.idleSeconds
         onIsIdleChanged: {
-            if (isIdle)
+            // KeepAwake (Control Center tile) refuses the saver while
+            // it's armed — belt one; belt two is the Wayland
+            // idle-inhibit surface KeepAwake itself advertises, which
+            // keeps hypridle and friends quiet too.
+            if (isIdle && !KeepAwake.active)
                 Quickshell.execDetached([root.launcher])
         }
     }

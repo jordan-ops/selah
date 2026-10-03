@@ -168,9 +168,9 @@ Singleton{
 
     onChargingChanged: {
         if (!hasBattery) return
-        if (charging) {
-            Quickshell.execDetached(["notify-send", "Charging", "Battery is now charging"])
-        }
+        // the "Charging" notification is gone: BatteryRing's chargePulse
+        // animation says it quieter (ring waves on plug-in). The
+        // low-battery critical above stays — that one you want loud.
         // turn the graph curve immediately at plug/unplug
         grabSample(true)
     }

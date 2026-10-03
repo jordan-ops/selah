@@ -27,6 +27,19 @@ Singleton {
     // this those bindings resolve to undefined and render transparent.
     readonly property color text_muted:  textMuted
 
+    // Panel fill for surfaces that should let the wallpaper through —
+    // the bar pill, control center, settings window and aether picker.
+    // Same RGB as `background`, alpha from the "appearance.transparency"
+    // choice (0/15/30/45 percent clear; 0 = pixel-identical to plain
+    // background). TEXT and glyph roles must keep the opaque
+    // `background` — a half-transparent label reads as broken type.
+    readonly property color panel: {
+        const raw = Settings.values["appearance.transparency"]
+        const n = parseInt(raw === undefined || raw === null ? "0" : String(raw), 10)
+        const t = isNaN(n) ? 0 : Math.max(0, Math.min(100, n))
+        return Qt.rgba(background.r, background.g, background.b, 1 - t / 100)
+    }
+
     FileView {
         id: colorFile
         path: Quickshell.env("HOME") + "/.local/state/quickshell/generated/colors.json"

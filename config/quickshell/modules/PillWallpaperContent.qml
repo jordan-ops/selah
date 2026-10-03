@@ -30,6 +30,19 @@ Item {
     readonly property var geom: Services.Themes.geom
     readonly property real labelZone: 20    // 16 text + 4 gap (shared with theme picker)
 
+    // Category chip row — only themes whose backgrounds folder actually
+    // has subfolders get one. Flat dirs (every shipped theme today)
+    // render no chips and cost no height: Bar's wallpaperStripHeight()
+    // adds its +22px on this very condition.
+    readonly property bool showChips: Services.Wallpapers.categories.length > 0
+
+    function cycleCategory(dir) {
+        const list = ["all", ...Services.Wallpapers.categories]
+        if (list.length < 2) return
+        const i = list.indexOf(Services.Wallpapers.category)
+        Services.Wallpapers.setCategory(list[(i + dir + list.length) % list.length])
+    }
+
     focus: root.active
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Escape) {
@@ -41,6 +54,11 @@ Item {
         } else if (event.key === Qt.Key_Left) {
             Services.Wallpapers.moveSelection(-1)
             event.accepted = true
+        } else if (event.key === Qt.Key_Tab && root.showChips) {
+            // Tab / Shift+Tab walks the category chips — the one key
+            // Left/Right don't already claim for the carousel
+            cycleCategory(event.modifiers & Qt.ShiftModifier ? -1 : 1)
+            event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             Services.Wallpapers.applySelected()
             Services.Wallpapers.closePicker()
@@ -48,12 +66,15 @@ Item {
         }
     }
 
-    // empty-state note (missing backgrounds folder / scan came back empty)
+    // empty-state note (missing backgrounds folder / scan came back empty
+    // / the active category has no images left)
     Text {
         font.family: Services.Fonts.family
         anchors.centerIn: parent
         visible: Services.Wallpapers.wallpapers.length === 0
-        text: "No wallpapers found for this theme"
+        text: Services.Wallpapers.category === "all"
+            ? "No wallpapers found for this theme"
+            : "No images in \"" + Services.Wallpapers.category + "\""
         color: Services.Colors.text
         opacity: 0.6
         font.pixelSize: 12
@@ -74,6 +95,48 @@ Item {
     readonly property real preWidth: widths.slice(0, Services.Wallpapers.selectedIndex)
         .reduce((a, b) => a + b, 0) + geom.spacing * Services.Wallpapers.selectedIndex
 
+    // Category chips: they own the top 22px of the strip (4 top pad +
+    // 18 chip), and `clip` below is pushed down by exactly that much so
+    // the carousel keeps its full height once the pill grew for them.
+    Row {
+        anchors.top: parent.top
+        anchors.topMargin: 4
+        anchors.horizontalCenter: parent.horizontalCenter
+        height: 18
+        visible: root.showChips
+        spacing: 6
+
+        Repeater {
+            model: ["all", ...Services.Wallpapers.categories]
+
+            delegate: Rectangle {
+                required property var modelData
+
+                width: chipLabel.implicitWidth + 16
+                height: 18
+                radius: 9
+                color: Services.Wallpapers.category === modelData
+                    ? Services.Colors.accent : Services.Colors.surface
+
+                Text {
+                    id: chipLabel
+                    font.family: Services.Fonts.family
+                    anchors.centerIn: parent
+                    text: modelData
+                    font.pixelSize: 11
+                    color: Services.Wallpapers.category === modelData
+                        ? Services.Colors.background : Services.Colors.textMuted
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Services.Wallpapers.setCategory(modelData)
+                }
+            }
+        }
+    }
+
     // clipper inset by the spec's pads: the row spans every wallpaper of
     // the theme but only hero ± one small ever shows — ±2 stays hidden
     Item {
@@ -84,7 +147,8 @@ Item {
         anchors.bottom: parent.bottom
         anchors.leftMargin: root.geom.padX
         anchors.rightMargin: root.geom.padX
-        anchors.topMargin: root.geom.padY
+        // +22 only while chips render — the strip's extra 22px is theirs
+        anchors.topMargin: root.geom.padY + (root.showChips ? 22 : 0)
         anchors.bottomMargin: root.geom.padY
         clip: true
 

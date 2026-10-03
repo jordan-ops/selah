@@ -12,8 +12,10 @@ import Quickshell.Networking
 // on every interactive press, BatteryRing as the hero status glyph so the
 // bar and this panel never disagree about what the battery looks like.
 Rectangle {
-    // NOTE: Bar.qml's controlCenterPopup implicitWidth/implicitHeight and
-    // its sizer's animated width both need to match this — 760 / 380.
+    // NOTE: Bar.qml's modes table ("controlcenter" size entry) needs to
+    // match this — 760 / 440 (440 grew from 380 when the toggles went
+    // 2 rows to 3). The advanced side popup deliberately keeps ITS 380:
+    // it sizes from ControlCenterAdvanced's own card, not from the pill.
     // 760 (was 600) is what gives the notification column room: the left
     // column is a fixed 340, so the notif column went 212 → 372 — the old
     // strip was too narrow to read a notification body in.
@@ -23,9 +25,13 @@ Rectangle {
     id: root
 
     width: 760
-    height: 380
+    height: 440
     radius: 18
-    color: Services.Colors.background
+    // panel (alpha'd) over the pill's own panel fill: two layers, so the
+    // control center reads slightly more opaque than the bare bar at
+    // transparency > 0 — never a fully solid slab either way. At 0 both
+    // are plain `background`, pixel-identical to before.
+    color: Services.Colors.panel
 
     // Mirror Services.Notifications.history into histModel with row-level
     // edits. The service reassigns the whole array on arrival, which a
@@ -248,9 +254,10 @@ Rectangle {
 
             }
 
-            // 3x2 bento grid of tiles — six cells, five used. Left click
-            // toggles; right click on Network/Bluetooth/Audio opens the
-            // matching advanced window (one click to the real controls).
+            // 3x3 bento grid of tiles — nine cells, eight used (one empty
+            // bottom-right). Left click toggles; right click on
+            // Network/Bluetooth/Audio opens the matching advanced window
+            // (one click to the real controls).
             Grid {
                 id: toggleGrid
 
@@ -331,6 +338,34 @@ Rectangle {
                     onRightClicked: Services.ScreenRecording.recording
                         ? Services.ScreenRecording.stopRecording()
                         : Services.ScreenRecording.startRecording()
+                }
+
+                // Game mode: hyprland animations/blur/shadows off, gaps
+                // and rounding to zero, DND on, quickshell animations
+                // paused — one flag (services/GameMode.qml explains the
+                // hyprctl reload restore path). Right click restores the
+                // config straight away.
+                SquareToggle {
+                    id: gameModeTile
+
+                    icon: "󰊴"
+                    label: "Game Mode"
+                    active: Services.GameMode.enabled
+                    onToggled: Services.GameMode.toggle()
+                    onRightClicked: Services.GameMode.disable()
+                }
+
+                // Keep awake: screensaver refuses to launch + a Wayland
+                // idle-inhibit surface covers every other idle consumer.
+                // Session-only by design (services/KeepAwake.qml) — a
+                // restart always comes back with idle protection armed.
+                SquareToggle {
+                    id: keepAwakeTile
+
+                    icon: "󰃖"
+                    label: "Keep Awake"
+                    active: Services.KeepAwake.active
+                    onToggled: Services.KeepAwake.toggle()
                 }
 
             }

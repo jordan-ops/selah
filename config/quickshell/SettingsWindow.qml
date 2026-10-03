@@ -281,7 +281,10 @@ FocusScope {
         id: panel
         anchors.fill: parent
         radius: app.shapeR
-        color: Services.Colors.background
+        // panel = background with the appearance.transparency alpha —
+        // settings lets the wallpaper through, text inside keeps the
+        // opaque background (880/942 below)
+        color: Services.Colors.panel
         border.color: Services.Colors.surface
         border.width: 1
 
