@@ -11,13 +11,64 @@ import "./modules"
 import "./services" as Services
 // import "./services/Colors"
 Variants {
+    id: barRoot
     model: Quickshell.screens
+
+    // Bar visibility flag, bound to shell.qml's barVisible (SUPER+H /
+    // `qs ipc call bar toggle`) — one shared flag for every screen's bar.
+    property bool barVisible: true
+
+    // Requested when a panel is asked for while the bar is hidden (keybind
+    // / IPC): shell.qml flips barVisible back on. An in-file assignment to
+    // barVisible from here would clobber the binding shell pushes in.
+    signal unhideRequested()
+
+    // Forces services/Screensaver.qml to instantiate with the shell — its
+    // IdleMonitor must be alive from startup for the 150 s idle trigger to
+    // fire, and nothing else in the UI references that singleton.
+    readonly property var screensaver: {
+        const s = Services.Screensaver
+        // the member access is what actually instantiates the singleton —
+        // a bare type reference on its own stays a lazy component
+        return s.idleSeconds >= 0 ? s : null
+    }
 
     PanelWindow{
         id: toplevel
         required property var modelData
         screen: modelData
-        WlrLayershell.layer: (pill.osdVisible || pill.notifVisible || Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.ControlCenter.open || Services.ClockCard.open || Services.Clipboard.open || Services.PowerMenu.open || Services.SettingsApp.open) ? WlrLayer.Overlay : WlrLayer.Top
+        // shell.qml's barVisible (SUPER+H / `qs ipc call bar toggle`).
+        // false unmaps the layer surface entirely — Hyprland releases the
+        // exclusive zone with it, so windows reflow into the freed strip.
+        visible: barRoot.barVisible
+
+        // Hiding the bar also closes whatever the pill had open: an
+        // unmapped card can't receive its click-away or Escape, and the
+        // remaining focus grabs would clear on unmap anyway — closing some
+        // panels but not the media/updates/recording cards. Explicit and
+        // uniform instead of grab-dependent. Polkit is deliberately left
+        // up: a pending auth prompt is modal (dismissPanels won't touch it
+        // either) and should still be there to answer after the bar
+        // returns.
+        Connections {
+            target: barRoot
+            function onBarVisibleChanged() {
+                if (!barRoot.barVisible) {
+                    pill.trayOpen = false   // chevron popup is its own surface
+                    let guard = 0
+                    while (!Services.Polkit.open && toplevel.panelOpen && guard++ < 16)
+                        toplevel.dismissPanels()
+                }
+            }
+        }
+
+        // Asking for a panel while the bar is hidden (keybind/IPC): the
+        // pill is the only surface that can show it, so bring the bar back
+        // rather than leaving the panel open-but-invisible. Transient pill
+        // modes (osd/notif) aren't in panelOpen — they clear themselves and
+        // don't get to pop the bar back up.
+        onPanelOpenChanged: if (panelOpen && !barRoot.barVisible) barRoot.unhideRequested()
+        WlrLayershell.layer: (pill.osdVisible || pill.notifVisible || Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.ControlCenter.open || Services.ClockCard.open || Services.Clipboard.open || Services.PowerMenu.open || Services.SettingsApp.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrLayer.Overlay : WlrLayer.Top
         anchors{ top: true; left:true; right:true}
 
         // FIXED window height = the tallest size any pill mode can reach
@@ -31,10 +82,11 @@ Variants {
         //
         // `mask` keeps input correct despite the big surface: only the
         // pill + the activity chips are clickable, everything else passes
-        // through to the windows behind. The chips (media/weather/updates/
-        // rec) live just past the pill's right edge — they need their own
-        // combined region or their MouseAreas are click-through (which is
-        // why the media chip never opened its popup). Child regions with
+        // through to the windows behind. The chips (updates/rec) live just
+        // past the pill's right edge — they need their own combined region
+        // or their MouseAreas are click-through. Media used to be a chip
+        // here too; it moved inside the pill as MediaVisualiser, covered
+        // by the pill's own region. Child regions with
         // `item` resolve that item's geometry directly, so the rects land
         // where the chips actually are.
         implicitHeight: 560
@@ -46,7 +98,9 @@ Variants {
         readonly property bool panelOpen: toplevel.ownsOverlay(Services.Launcher) || toplevel.ownsOverlay(Services.Themes)
             || toplevel.ownsOverlay(Services.Wallpapers) || toplevel.ownsOverlay(Services.ControlCenter)
             || toplevel.ownsOverlay(Services.ClockCard) || toplevel.ownsOverlay(Services.Clipboard)
-            || toplevel.ownsOverlay(Services.PowerMenu)
+            || toplevel.ownsOverlay(Services.PowerMenu) || toplevel.ownsOverlay(Services.Polkit)
+            || toplevel.ownsOverlay(Services.Media) || toplevel.ownsOverlay(Services.Updates)
+            || toplevel.ownsOverlay(Services.ScreenRecording)
 
         // Multi-monitor overlay ownership: services hold ONE shared `open`
         // flag, but each screen has its own bar instance. Services record the
@@ -82,6 +136,9 @@ Variants {
             if (Services.Wallpapers.open)   { Services.Wallpapers.closePicker(); return }
             if (Services.ControlCenter.open){ Services.ControlCenter.close(); return }
             if (Services.ClockCard.open)    { Services.ClockCard.close(); return }
+            if (Services.Media.open)        { Services.Media.close(); return }
+            if (Services.Updates.open)        { Services.Updates.close(); return }
+            if (Services.ScreenRecording.open){ Services.ScreenRecording.close(); return }
             if (Services.PowerMenu.open)    { Services.PowerMenu.open = false; return }
         }
 
@@ -123,7 +180,29 @@ Variants {
         // Escape could not be delivered at all. Everything with a text field
         // needs this — an unfocusable field means no keyboard input and no
         // Escape, because a layershell surface with no focus never sees keys.
-        WlrLayershell.keyboardFocus: (Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.Clipboard.open) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        // ClockCard (taskInput) and SettingsApp (search / password / editors)
+        // were later found missing here too — same bug class. ClockCard keeps
+        // its entry but must NOT also arm a HyprlandFocusGrab: grab +
+        // Exclusive on one surface made Hyprland finish the seat grab the
+        // moment the exclusive commit landed, so the popup closed itself
+        // right after opening (see the note where its grab used to be).
+        // SettingsApp deliberately NOT in this predicate: the settings
+        // window is settingsPopup (its own xdg_popup), not the pill —
+        // adding it here made the BAR surface Exclusive while the settings
+        // HyprlandFocusGrab whitelists only [settingsPopup], so keyboard
+        // landed outside the grab set, the grab cleared instantly, and
+        // onCleared hid the window the moment it opened ("settings closes
+        // itself"). Settings keyboard comes from that grab alone (Sep 24
+        // behavior). ClockCard stays because its grab IS [toplevel].
+        // Polkit joins for the same reason ClockCard is here: the password
+        // field lives in the pill (bar surface) now, so the bar must be
+        // Exclusive while an auth request is pending or the field can
+        // never receive keys — same recipe as the launcher's search field.
+        // Updates + recording join for the media card's reason: no text
+        // field, but the pill still needs Exclusive so its Keys handler
+        // receives Escape — their FocusGrabs are gone (grab + Exclusive
+        // on one surface is the fight described above).
+        WlrLayershell.keyboardFocus: (Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.Clipboard.open || Services.ClockCard.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         Rectangle{
             id: pill
@@ -144,7 +223,7 @@ Variants {
             // "power" joined this list once its swatches grew from 36px
             // circles to 64px squares — tall enough now to have the same
             // problem. "controlcenter" joins for the same reason — 380px tall.
-            readonly property bool tallMode: mode === "launcher" || mode === "theme" || mode === "notif" || mode === "power" || mode === "controlcenter" || mode === "wallpaper" || mode === "clock" || mode === "clipboard"
+            readonly property bool tallMode: mode === "launcher" || mode === "theme" || mode === "notif" || mode === "power" || mode === "controlcenter" || mode === "wallpaper" || mode === "clock" || mode === "clipboard" || mode === "polkit" || mode === "media" || mode === "updates" || mode === "recording"
             readonly property real morphRadius: tallMode ? 18 : height / 2
             bottomLeftRadius: morphRadius
 	    bottomRightRadius: morphRadius
@@ -171,6 +250,27 @@ Variants {
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Escape && Services.Clipboard.open) {
                     Services.Clipboard.close()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape && Services.ClockCard.open) {
+                    Services.ClockCard.close()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape && Services.ControlCenter.open) {
+                    // plain in-pill CC — the advanced popup has its own
+                    // handler in ControlCenterAdvanced.qml (different
+                    // window, its keys never reach this one)
+                    Services.ControlCenter.close()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape && Services.Media.open) {
+                    // in-pill media card — same recipe as the clock card
+                    Services.Media.close()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape && Services.ScreenRecording.open) {
+                    // in-pill recording card — same recipe as the media card
+                    Services.ScreenRecording.close()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape && Services.Updates.open) {
+                    // in-pill updates card — same recipe as the media card
+                    Services.Updates.close()
                     event.accepted = true
                 }
             }
@@ -326,12 +426,19 @@ Variants {
 
             // one word describes what the pill is currently showing —
             // same idea as Pill.qml's `mode`. Order matters: first match wins.
-            readonly property string mode: toplevel.ownsOverlay(Services.Launcher) ? "launcher"
+            // Polkit leads: an auth request is modal and preempts everything
+            // (it also closes the keyboard-grab panels itself — see the
+            // Services.Polkit Connections near the launcher's).
+            readonly property string mode: toplevel.ownsOverlay(Services.Polkit) ? "polkit"
+                : toplevel.ownsOverlay(Services.Launcher) ? "launcher"
                 : toplevel.ownsOverlay(Services.Themes) ? "theme"
                 : toplevel.ownsOverlay(Services.Wallpapers) ? "wallpaper"
                 : toplevel.ownsOverlay(Services.ControlCenter) ? "controlcenter"
                 : toplevel.ownsOverlay(Services.ClockCard) ? "clock"
                 : toplevel.ownsOverlay(Services.Clipboard) ? "clipboard"
+                : toplevel.ownsOverlay(Services.Media) ? "media"
+                : toplevel.ownsOverlay(Services.ScreenRecording) ? "recording"
+                : toplevel.ownsOverlay(Services.Updates) ? "updates"
                 : pill.osdVisible ? "osd"
                 : pill.notifVisible ? "notif"
                 : toplevel.ownsOverlay(Services.PowerMenu) ? "power"
@@ -346,6 +453,10 @@ Variants {
                 rest:         () => pill.compactAtRest()
                     ? Qt.size(pill.compactBarWidth(), 30)
                     : Qt.size(pill.fullBarWidth(), 35),
+                // auth prompt: 400 wide like the old dialog card, height
+                // follows the content column (+20px margins top/bottom) —
+                // same live-content-size trick as "notif"
+                polkit:       () => Qt.size(400, polkitCol.implicitHeight + 40),
                 launcher:     () => Qt.size(360, 12 + 30 + 8 + pill.confirmOverlayHeight() + 12),
                 theme:        () => Qt.size(Services.Themes.geom.pillW, 24 + pill.themeGridHeight()),
                 wallpaper:    () => Qt.size(Services.Themes.geom.pillW, 24 + pill.wallpaperStripHeight()),
@@ -354,7 +465,12 @@ Variants {
                 osd:          () => Qt.size(220, 35),
                 notif:        () => Qt.size(420, Math.max(35, notificationContent.implicitHeight + 22)),
                 power:        () => Qt.size(pill.powerRowWidth(), 24 + 64),
-                clipboard:    () => Qt.size(430, 12 + 30 + 8 + clipboardContent.listH + 12)
+                clipboard:    () => Qt.size(430, 12 + 30 + 8 + clipboardContent.listH + 12),
+                media:        () => Qt.size(528, 240),
+                // cards are 260x300 / 280x380; pill = card + 24px each
+                // side + 20px top/bottom (the media card's margins)
+                recording:    () => Qt.size(308, 340),
+                updates:      () => Qt.size(328, 420)
             })
 
             readonly property size targetSize: (modes[mode] || modes.rest)()
@@ -431,6 +547,81 @@ Variants {
                 }
             }
 
+            // Polkit: focus the password field the moment a request lands —
+            // the bar surface is keyboard-Exclusive while
+            // Services.Polkit.open (toplevel predicate), so this is exactly
+            // the launcher recipe that already types every day.
+            //
+            // The request must also CLEAR panels whose focus grabs would
+            // starve the field: a HyprlandFocusGrab confines keyboard to
+            // its own surface list, so an open control center (advanced
+            // popup) or settings window would swallow every
+            // keystroke meant for this prompt. The old full-screen dialog
+            // never needed this — its scrim covered the whole screen.
+            Connections {
+                target: Services.Polkit
+                function onOpenChanged() {
+                    if (Services.Polkit.open) {
+                        if (Services.ControlCenter.open) Services.ControlCenter.close()
+                        if (Services.SettingsApp.open) Services.SettingsApp.hide()
+                        if (Services.Updates.open) Services.Updates.close()
+                        // only the owning bar's field may take focus —
+                        // a second display means a second field
+                        if (toplevel.ownsOverlay(Services.Polkit)) {
+                            polkitField.text = ""
+                            Qt.callLater(() => polkitField.forceActiveFocus())
+                        }
+                    } else {
+                        polkitField.text = ""
+                    }
+                }
+            }
+
+            // Clock: type-the-task-the-moment-it-opens, exactly like the
+            // launcher's search field — the bar is Exclusive while
+            // ClockCard.open, so focus lands on taskInput and keys flow.
+            // Only the owning bar focuses (second display = second card).
+            Connections {
+                target: Services.ClockCard
+                function onOpenChanged() {
+                    if (Services.ClockCard.open) {
+                        if (toplevel.ownsOverlay(Services.ClockCard))
+                            Qt.callLater(() => clockCardView.focusTaskInput())
+                    } else {
+                        clockCardView.clearTaskInput()
+                    }
+                }
+            }
+
+            // The media card has no text field, but the pill's Keys
+            // handler still needs an activeFocusItem to receive Escape —
+            // same reason the CC open path forces focus onto the pill.
+            Connections {
+                target: Services.Media
+                function onOpenChanged() {
+                    if (Services.Media.open && toplevel.ownsOverlay(Services.Media))
+                        Qt.callLater(() => pill.forceActiveFocus())
+                }
+            }
+
+            // Same as media: no text field, but the pill needs an
+            // activeFocusItem so its Keys handler receives Escape.
+            Connections {
+                target: Services.ScreenRecording
+                function onOpenChanged() {
+                    if (Services.ScreenRecording.open && toplevel.ownsOverlay(Services.ScreenRecording))
+                        Qt.callLater(() => pill.forceActiveFocus())
+                }
+            }
+
+            Connections {
+                target: Services.Updates
+                function onOpenChanged() {
+                    if (Services.Updates.open && toplevel.ownsOverlay(Services.Updates))
+                        Qt.callLater(() => pill.forceActiveFocus())
+                }
+            }
+
             Item {
                 id: normalContent
                 anchors.fill: parent
@@ -468,6 +659,8 @@ Variants {
                         }
                     }
 
+                    MediaVisualiser {}
+
                     Clock {}
 
                     Workspaces {
@@ -482,9 +675,10 @@ Variants {
                 // ----- full segmented row: left chip | dots | right chips -----
                 // restStyle "wide" shows this always; "compact" shows it while
                 // hover-expanded. The surface chip around clock · date is half
-                // the segmented-pill identity — media/recording/updates moved
-                // OUT to the activity chips that slide from the pill's right
-                // edge (they need to be reachable from the compact capsule too).
+                // the segmented-pill identity — recording/updates live out in
+                // the activity chips that slide from the pill's right edge;
+                // media moved back INSIDE as MediaVisualiser (its chip +
+                // detached popup are gone).
                 Rectangle {
                     id: leftChip
                     anchors.left: parent.left
@@ -512,6 +706,8 @@ Variants {
                         id: leftRow
                         anchors.centerIn: parent
                         spacing: 10
+
+                        MediaVisualiser {}
 
                         Clock {
                             id: clockItem
@@ -1282,7 +1478,732 @@ Variants {
                 Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
 
                 ClockCardPopup {
+                    id: clockCardView
                     anchors.centerIn: parent
+                }
+            }
+
+            // Media card folded in the same way — clicking the visualiser
+            // in the rest row morphs the pill to 528x240 (modes.media) and
+            // this card centers inside. Replaces the old detached popup
+            // window + the activity chip it hung off: one surface, no
+            // anchor math, drawn in the bar's own layer like the clock.
+            // Header, progress rail (click/drag to seek), transport — the
+            // rail's position ticks come from Media.qml's Timer, which only
+            // runs while this card is open so the closed bar never pays
+            // for a 1s heartbeat.
+            Item {
+                anchors.fill: parent
+                opacity: pill.mode === "media" ? 1 : 0
+                visible: (pill.mode === "media") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                Rectangle {
+                    id: mediaCard
+                    width: 480
+                    height: 200
+                    anchors.centerIn: parent
+                    color: Services.Colors.surface
+                    radius: 16
+                    // same elevated-card language as the popup it replaces:
+                    // tonal surface + hairline outline, one system with the
+                    // tray/CC popups
+                    border.width: 1
+                    border.color: Services.Colors.low
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 16
+
+                        // header — art thumb, title/artist, app icon
+                        Row {
+                            width: parent.width
+                            height: 72
+                            spacing: 12
+
+                            Rectangle {
+                                id: artFrame
+                                width: 72
+                                height: 72
+                                radius: 12
+                                color: Services.Colors.surfaceAlt
+                                clip: true
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Image {
+                                    anchors.fill: parent
+                                    source: Services.Media.artUrl
+                                    visible: Services.Media.artUrl !== ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    smooth: true
+                                    asynchronous: true
+                                }
+
+                                Text {
+                                    font.family: Services.Fonts.family
+                                    anchors.centerIn: parent
+                                    visible: Services.Media.artUrl === ""
+                                    text: "\uf385"
+                                    font.pixelSize: 24
+                                    color: Services.Colors.textMuted
+                                }
+                            }
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 84
+                                spacing: 5
+
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Text {
+                                        font.family: Services.Fonts.family
+                                        width: Math.max(0, parent.width - appGlyph.width - 8)
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                        text: Services.Media.title
+                                        color: Services.Colors.text
+                                        font.pixelSize: 15
+                                        font.bold: true
+                                    }
+
+                                    // real themed icon when the theme has
+                                    // one (cliamp ships one; resolves from
+                                    // local disk the frame the player
+                                    // registers), nerd glyph otherwise
+                                    Item {
+                                        id: appGlyph
+                                        width: 16
+                                        height: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+
+                                        Image {
+                                            id: appIconImg
+                                            anchors.fill: parent
+                                            source: Services.Media.appIconSource
+                                            visible: source.toString() !== ""
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            asynchronous: true
+                                        }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: !appIconImg.visible
+                                            font.family: Services.Fonts.family
+                                            text: Services.Media.appIcon
+                                            color: Services.Colors.accent
+                                            font.pixelSize: 14
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    font.family: Services.Fonts.family
+                                    width: parent.width
+                                    elide: Text.ElideRight
+                                    text: Services.Media.artist
+                                    color: Services.Colors.textMuted
+                                    font.pixelSize: 12
+                                }
+                            }
+                        }
+
+                        // progress — elapsed · seekable rail · duration.
+                        // Click/drag seeks (Media.seek guards on canSeek
+                        // and length, so live radio stays inert); players
+                        // that report no length get a flat muted rail with
+                        // a LIVE tag instead of a fill. Position advances
+                        // via the open-gated 1s Timer in services/Media.qml
+                        // — the closed bar never ticks.
+                        Row {
+                            id: progressRow
+                            width: parent.width
+                            height: 16
+                            spacing: 10
+
+                            readonly property real frac: {
+                                if (Services.Media.length <= 0) return 0
+                                return Math.max(0, Math.min(1, Services.Media.position / Services.Media.length))
+                            }
+
+                            Text {
+                                id: progressElapsed
+                                width: 36
+                                height: parent.height
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 11
+                                color: Services.Colors.textMuted
+                                text: Services.Media.position > 0
+                                    ? Services.Media.formatTime(Services.Media.position) : ""
+                            }
+
+                            Item {
+                                id: rail
+                                height: parent.height
+                                width: parent.width - progressElapsed.width - progressTotal.width - (progressRow.spacing * 2)
+
+                                Rectangle {
+                                    id: railTrack
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: 5
+                                    radius: 2.5
+                                    color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
+                                                   Services.Colors.text.b, 0.15)
+                                }
+
+                                Rectangle {
+                                    anchors.left: railTrack.left
+                                    anchors.verticalCenter: railTrack.verticalCenter
+                                    width: railTrack.width * progressRow.frac
+                                    height: 5
+                                    radius: 2.5
+                                    color: Services.Colors.accent
+                                    visible: Services.Media.length > 0
+                                }
+
+                                // thumb rides the fill end, clamped inside
+                                // the track so it never pokes past either edge
+                                Rectangle {
+                                    width: 9
+                                    height: 9
+                                    radius: 4.5
+                                    color: Services.Colors.text
+                                    visible: Services.Media.length > 0
+                                    x: (railTrack.width - width) * progressRow.frac
+                                    anchors.verticalCenter: railTrack.verticalCenter
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+
+                                    function fracAt(mx) {
+                                        return Math.max(0, Math.min(1, mx / width))
+                                    }
+                                    onPressed: (mouse) => Services.Media.seek(fracAt(mouse.x))
+                                    onPositionChanged: (mouse) => {
+                                        if (mouse.buttons & Qt.LeftButton)
+                                            Services.Media.seek(fracAt(mouse.x))
+                                    }
+                                }
+                            }
+
+                            Text {
+                                id: progressTotal
+                                width: 36
+                                height: parent.height
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 11
+                                color: Services.Colors.textMuted
+                                text: Services.Media.length > 0
+                                    ? Services.Media.formatTime(Services.Media.length) : "LIVE"
+                            }
+                        }
+
+                        // transport — hover glides on the tonal circles
+                        Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: 28
+
+                            Rectangle {
+                                id: prevBtn
+                                width: 40
+                                height: 40
+                                radius: 20
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
+                                               Services.Colors.text.b, prevMa.containsMouse ? 0.16 : 0.08)
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Services.Motion.effectsFast
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                    }
+                                }
+                                scale: prevMa.pressed ? 0.9 : 1
+                                Behavior on scale {
+                                    SpringAnimation {
+                                        spring: Services.Motion.popSpring
+                                        damping: Services.Motion.popDamping
+                                    }
+                                }
+
+                                Text {
+                                    font.family: Services.Fonts.family
+                                    anchors.centerIn: parent
+                                    // nf-fa-backward U+F04A — plain back arrow,
+                                    // replaces the old wrong codepoint
+                                    text: "\uf04a"
+                                    font.pixelSize: 17
+                                    color: Services.Colors.text
+                                }
+
+                                MouseArea {
+                                    id: prevMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Services.Media.previous()
+                                }
+                            }
+
+                            Rectangle {
+                                id: playBtn
+                                width: 48
+                                height: 48
+                                radius: 24
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Services.Colors.accent
+                                scale: playMa.pressed ? 0.9 : 1
+                                Behavior on scale {
+                                    SpringAnimation {
+                                        spring: Services.Motion.popSpring
+                                        damping: Services.Motion.popDamping
+                                    }
+                                }
+
+                                Text {
+                                    font.family: Services.Fonts.family
+                                    anchors.centerIn: parent
+                                    // nf-fa-pause F04C / nf-fa-play F04B
+                                    text: Services.Media.playing ? "\uf04c" : "\uf04b"
+                                    font.pixelSize: 20
+                                    color: Services.Colors.background
+                                }
+
+                                MouseArea {
+                                    id: playMa
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Services.Media.togglePlay()
+                                }
+                            }
+
+                            Rectangle {
+                                id: nextBtn
+                                width: 40
+                                height: 40
+                                radius: 20
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
+                                               Services.Colors.text.b, nextMa.containsMouse ? 0.16 : 0.08)
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Services.Motion.effectsFast
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                    }
+                                }
+                                scale: nextMa.pressed ? 0.9 : 1
+                                Behavior on scale {
+                                    SpringAnimation {
+                                        spring: Services.Motion.popSpring
+                                        damping: Services.Motion.popDamping
+                                    }
+                                }
+
+                                Text {
+                                    font.family: Services.Fonts.family
+                                    anchors.centerIn: parent
+                                    // nf-fa-forward U+F04E — plain forward arrow
+                                    text: "\uf04e"
+                                    font.pixelSize: 17
+                                    color: Services.Colors.text
+                                }
+
+                                MouseArea {
+                                    id: nextMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Services.Media.next()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Updates card folded the same way — the rest-row chip (or
+            // `qs ipc call updates toggle`) morphs the pill to 328x420
+            // (modes.updates) and the list centers inside. Replaces the
+            // detached popup window + its FocusGrab: click-away is
+            // the outsideCatcher (panelOpen), Esc the pill's Keys handler.
+            Item {
+                anchors.fill: parent
+                opacity: pill.mode === "updates" ? 1 : 0
+                visible: (pill.mode === "updates") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                UpdatesPopup {
+                    anchors.centerIn: parent
+                }
+            }
+
+            // Recording card folded the same way — the rec chip or the
+            // control center's record tile morphs the pill to 308x340
+            // (modes.recording) and the timer/stop card centers inside.
+            // Replaces the detached popup window + its FocusGrab.
+            Item {
+                anchors.fill: parent
+                opacity: pill.mode === "recording" ? 1 : 0
+                visible: (pill.mode === "recording") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                ScreenRecordingPopup {
+                    anchors.centerIn: parent
+                }
+            }
+
+            // Polkit auth prompt — merged into the bar like the launcher
+            // (was its own full-screen PanelWindow + scrim; see the
+            // deprecated PolkitDialog.qml). The pill morphs to the prompt's
+            // size (modes.polkit → 400 wide, height follows the column),
+            // keyboard comes from the toplevel keyboardFocus predicate
+            // (Services.Polkit.open → Exclusive, the launcher recipe), and
+            // the pill mask gives the whole card input for free.
+            //
+            // Deliberately NOT in dismissPanels(): an auth request is
+            // refused explicitly (Esc / Cancel), never by clicking away —
+            // the outside catcher just swallows the click instead (the old
+            // scrim's job, now panelOpen + the full-size mask region).
+            Item {
+                id: polkitContent
+                anchors.fill: parent
+                opacity: pill.mode === "polkit" ? 1 : 0
+                visible: (pill.mode === "polkit") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                // color aliases — were `win.*` on the old dialog window
+                readonly property color bg: Services.Colors.background
+                readonly property color fg: Services.Colors.text
+                readonly property color dim: Services.Colors.textMuted
+                readonly property color accent: Services.Colors.accent
+                readonly property color critical: Services.Colors.critical
+                readonly property var flow: Services.Polkit.flow
+
+                // absorbs clicks (no dismissal) and re-focuses the field so
+                // a stray click never leaves the prompt typed into nowhere —
+                // the old dialog's scrim MouseArea, in-pill form
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: polkitField.forceActiveFocus()
+                }
+
+                // Esc cancels even when focus sits outside the field (keys
+                // bubble from the focused item up the parent chain; the field
+                // marks Escape accepted too, so the two never fight)
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Escape) {
+                        Services.Polkit.cancel()
+                        event.accepted = true
+                    }
+                }
+
+                Column {
+                    id: polkitCol
+                    // plain x/y instead of anchors so the wrong-password
+                    // shake can move the column (anchored items can't be
+                    // offset on x)
+                    x: 20 + shakeOffset
+                    y: 20
+                    width: parent.width - 40
+                    spacing: 10
+
+                    property real shakeOffset: 0
+
+                    // ── header: lock + title + machine-readable action ──
+                    Row {
+                        width: parent.width
+                        spacing: 12
+
+                        Rectangle {
+                            width: 40
+                            height: 40
+                            radius: 20
+                            color: Services.Polkit.errorFlash ? polkitContent.critical : polkitContent.accent
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: Services.Motion.effectsFast
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "\uf023"   // nf-fa-lock
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 17
+                                color: polkitContent.bg
+                            }
+                        }
+
+                        Column {
+                            width: parent.width - 52
+                            spacing: 2
+
+                            Text {
+                                width: parent.width
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 15
+                                font.bold: true
+                                color: polkitContent.fg
+                                text: "Authentication required"
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                visible: polkitContent.flow && polkitContent.flow.actionId !== ""
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 11
+                                color: polkitContent.dim
+                                text: polkitContent.flow ? polkitContent.flow.actionId : ""
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // ── what polkitd wants done ──
+                    Text {
+                        width: parent.width
+                        visible: polkitContent.flow && polkitContent.flow.message !== ""
+                        wrapMode: Text.WordWrap
+                        font.family: Services.Fonts.family
+                        font.pixelSize: 12
+                        color: polkitContent.dim
+                        text: polkitContent.flow ? polkitContent.flow.message : ""
+                    }
+
+                    Rectangle { width: parent.width; height: 1; color: Services.Colors.low }
+
+                    // ── account chips, only when the flow offers a choice ──
+                    Row {
+                        width: parent.width
+                        spacing: 6
+                        visible: polkitContent.flow && polkitContent.flow.identities.length > 1
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: polkitContent.dim
+                            text: "Account"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Repeater {
+                            model: polkitContent.flow ? polkitContent.flow.identities : []
+
+                            Rectangle {
+                                id: chip
+                                required property var modelData
+                                readonly property bool selected:
+                                    polkitContent.flow && polkitContent.flow.selectedIdentity === modelData
+
+                                width: chipLabel.width + 18
+                                height: 24
+                                radius: 12
+                                color: selected ? polkitContent.accent : Services.Colors.surface
+
+                                Text {
+                                    id: chipLabel
+                                    anchors.centerIn: parent
+                                    font.family: Services.Fonts.family
+                                    font.pixelSize: 11
+                                    font.bold: chip.selected
+                                    color: chip.selected ? polkitContent.bg : polkitContent.dim
+                                    text: String(chip.modelData)
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Services.Polkit.pickIdentity(chip.modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── password field ──
+                    Rectangle {
+                        id: inputBox
+                        width: parent.width
+                        height: 38
+                        radius: 10
+                        color: Services.Colors.surface
+                        border.width: polkitField.activeFocus ? 1 : 0
+                        border.color: polkitContent.accent
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: Services.Motion.effectsFast
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                            }
+                        }
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 13
+                            color: Services.Polkit.errorFlash ? polkitContent.critical : polkitContent.dim
+                            opacity: polkitField.text === "" ? 1 : 0
+                            text: Services.Polkit.submitted ? "Checking…"
+                                : Services.Polkit.errorFlash ? "Wrong password"
+                                : (polkitContent.flow && polkitContent.flow.inputPrompt !== "") ? polkitContent.flow.inputPrompt
+                                : "Password"
+
+                            Behavior on opacity {
+                                NumberAnimation { duration: Services.Motion.effectsFast }
+                            }
+                        }
+
+                        // focus MouseArea UNDER the input (declared first) so
+                        // clicks in the side margins still focus the field
+                        // while clicks on the text itself place the cursor
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: polkitField.forceActiveFocus()
+                        }
+
+                        TextInput {
+                            id: polkitField
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            clip: true
+                            selectByMouse: true
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 13
+                            color: Services.Polkit.errorFlash ? polkitContent.critical : polkitContent.fg
+                            selectionColor: polkitContent.accent
+                            echoMode: (polkitContent.flow && polkitContent.flow.responseVisible)
+                                      ? TextInput.Normal : TextInput.Password
+                            passwordCharacter: "•"
+                            readOnly: Services.Polkit.submitted
+
+                            onAccepted: {
+                                Services.Polkit.submit(text)
+                                text = ""
+                            }
+                            Keys.onEscapePressed: {
+                                Services.Polkit.cancel()
+                                event.accepted = true
+                            }
+                        }
+                    }
+
+                    // ── supplementary note / error line ──
+                    Text {
+                        width: parent.width
+                        visible: polkitContent.flow && polkitContent.flow.supplementaryMessage !== ""
+                                 && !Services.Polkit.submitted
+                        wrapMode: Text.WordWrap
+                        font.family: Services.Fonts.family
+                        font.pixelSize: 11
+                        color: (polkitContent.flow && polkitContent.flow.supplementaryIsError)
+                               || Services.Polkit.errorFlash ? polkitContent.critical : polkitContent.dim
+                        text: polkitContent.flow ? polkitContent.flow.supplementaryMessage : ""
+                    }
+
+                    // ── actions ──
+                    Row {
+                        width: parent.width
+                        spacing: 8
+                        layoutDirection: Qt.RightToLeft
+
+                        Rectangle {
+                            id: authBtn
+                            width: authTxt.implicitWidth + 34
+                            height: 32
+                            radius: 16
+                            color: polkitContent.accent
+                            opacity: Services.Polkit.submitted ? 0.6 : 1
+
+                            Text {
+                                id: authTxt
+                                anchors.centerIn: parent
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: polkitContent.bg
+                                text: "Authenticate"
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !Services.Polkit.submitted
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    Services.Polkit.submit(polkitField.text)
+                                    polkitField.text = ""
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            id: cancelBtn
+                            width: cancelTxt.implicitWidth + 34
+                            height: 32
+                            radius: 16
+                            color: cancelMouse.containsMouse
+                                   ? Services.Colors.surfaceAlt : Services.Colors.surface
+
+                            Text {
+                                id: cancelTxt
+                                anchors.centerIn: parent
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 12
+                                color: polkitContent.fg
+                                text: "Cancel"
+                            }
+
+                            MouseArea {
+                                id: cancelMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Services.Polkit.cancel()
+                            }
+                        }
+                    }
+                }
+
+                // wrong-password shake (omarchy's shakeOffset pattern) —
+                // targets the column, since the anchored content root can't
+                // slide on x
+                SequentialAnimation {
+                    id: shake
+                    NumberAnimation { target: polkitCol; property: "shakeOffset"; to: -8; duration: 35; easing.type: Easing.OutQuad }
+                    NumberAnimation { target: polkitCol; property: "shakeOffset"; to: 8; duration: 50; easing.type: Easing.InOutQuad }
+                    NumberAnimation { target: polkitCol; property: "shakeOffset"; to: 0; duration: 55; easing.type: Easing.OutQuad }
+                }
+                Connections {
+                    target: Services.Polkit
+                    function onFailuresChanged() {
+                        if (Services.Polkit.failures > 0) {
+                            polkitField.text = ""   // never keep the wrong password around
+                            shake.restart()
+                        }
+                    }
                 }
             }
 
@@ -1399,68 +2320,6 @@ Variants {
                 }
             }
 
-            // --- media: app icon + position; click opens the card ---
-            Item {
-                id: mediaChip
-                property bool expanded: false
-                readonly property bool active: Services.Media.hasPlayer
-                height: 26
-                width: active ? mediaBody.width : 0
-                opacity: active ? 1 : 0
-                visible: active || opacity > 0.01
-                clip: true
-                anchors.verticalCenter: parent.verticalCenter
-
-                Behavior on width { SpringAnimation { spring: Services.Motion.spatialFastSpring; damping: Services.Motion.spatialFastDamping } }
-                Behavior on opacity { NumberAnimation { duration: Services.Motion.medium1; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
-
-                Item {
-                    id: mediaInner
-                    height: parent.height
-                    width: mediaBody.width
-                    x: mediaChip.active ? 0 : -16
-                    Behavior on x { SpringAnimation { spring: Services.Motion.popSpring; damping: Services.Motion.popDamping } }
-
-                    Rectangle {
-                        id: mediaBody
-                        height: 26
-                        radius: 13
-                        color: Services.Colors.surface
-                        width: mediaRow.implicitWidth + 18
-
-                        Row {
-                            id: mediaRow
-                            anchors.centerIn: parent
-                            spacing: 5
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                // paused swaps the icon for the pause glyph —
-                                // hasPlayer covers playing OR paused
-                                text: Services.Media.playing ? Services.Media.appIcon : "󰏤"
-                                font.pixelSize: 12
-                                color: Services.Colors.accent
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                font.family: Services.Fonts.family
-                                text: Services.Media.formatTime(Services.Media.position)
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Services.Colors.text
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: mediaChip.expanded = !mediaChip.expanded
-                        }
-                    }
-                }
-            }
-
             // --- updates: monthly nudge chip (gate lives in Updates.qml) ---
             Item {
                 id: updatesChip
@@ -1523,15 +2382,6 @@ Variants {
 
         }
 
-        // tiny IPC hook so the card can be toggled from binds/scripts (and
-        // verified without a pointer): qs ipc call media toggle
-        IpcHandler {
-            target: "media"
-            function toggle(): void { mediaChip.expanded = !mediaChip.expanded }
-            function isExpanded(): bool { return mediaChip.expanded }
-            function hasPlayer(): bool { return mediaChip.active }
-        }
-
         // same trick for the tray popup — the whole feature is hover-driven,
         // so this is the only way to exercise it without a pointer:
         //   qs ipc call tray open / close / isOpen / count
@@ -1559,7 +2409,7 @@ Variants {
             // Centred on the chevron. trayChip sits at the pill's right edge
             // and the pill is horizontally centred, so its centre in toplevel
             // coords is (W + pillW)/2 - rightMargin - chipW/2 — the same
-            // arithmetic recordingPopup does. Clamped both ways because a
+            // arithmetic the drop-downs did. Clamped both ways because a
             // long tray row centred that far right would run off the screen.
             // mapFromItem() is avoided on purpose: the Quickshell docs say it
             // does NOT update reactively.
@@ -1577,9 +2427,9 @@ Variants {
             implicitHeight: trayCard.height
             color: "transparent"
 
-            // same animate-then-hide window pattern as mediaPopup /
-            // recordingPopup / updatesPopup: show instantly on open, let the
-            // card spring, and wait out the exit before the surface goes away
+            // same animate-then-hide window pattern the drop-down popups
+            // used: show instantly on open, let the card spring, and wait
+            // out the exit before the surface goes away
             property bool windowVisible: false
             visible: windowVisible
 
@@ -1808,380 +2658,6 @@ Variants {
             }
         }
 
-        // full media card — anchored under the media activity chip, so it
-        // hangs off wherever that chip currently sits
-        PopupWindow {
-            id: mediaPopup
-            anchor.window: toplevel
-            // activityRow sits in toplevel coordinates (anchored to pill.right),
-            // mediaChip.x is its Row slot — summing the two tracks reactively,
-            // unlike mapFromItem() which the Quickshell docs say does NOT
-            // update reactively
-            anchor.rect.x: activityRow.x + mediaChip.x
-            anchor.rect.y: pill.height + 4
-            implicitWidth: 480
-            implicitHeight: 220
-            color: "transparent"
-
-            // standard animate-then-hide window pattern (settingsPopup,
-            // recordingPopup, updatesPopup, advPanel all do this): the
-            // window shows instantly on open, mediaSizer springs the card
-            // out of the middle, and closing waits 270ms so the exit
-            // animation plays before the surface goes away.
-            property bool windowVisible: false
-            visible: windowVisible
-
-            Connections {
-                target: mediaChip
-                function onExpandedChanged() {
-                    if (mediaChip.expanded) {
-                        mediaClose.stop()
-                        // pulse visible off→on: forces a FRESH map every
-                        // open. Guards against the stale-open state where
-                        // Hyprland suppressed the popup under a fullscreen
-                        // client — QML thought it was shown, compositor
-                        // never mapped it, and it never recovered.
-                        mediaPopup.windowVisible = false
-                        mapPulse.restart()
-                    } else {
-                        mediaClose.restart()
-                    }
-                }
-            }
-
-            Timer {
-                id: mapPulse
-                interval: 30
-                onTriggered: mediaPopup.windowVisible = true
-            }
-
-            Timer {
-                id: mediaClose
-                interval: 270
-                onTriggered: {
-                    if (!mediaChip.expanded)
-                        mediaPopup.windowVisible = false
-                }
-            }
-
-            Item {
-                id: mediaSizer
-                anchors.centerIn: parent
-                clip: true
-                width:  mediaChip.expanded ? 480 : 0
-                height: mediaChip.expanded ? 220 : 0
-
-                Behavior on width { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-                Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-
-            Rectangle {
-                id: mediaCard
-                width: 480
-                height: 220
-                anchors.centerIn: parent
-                color: Services.Colors.surface
-                radius: 16
-                // same elevated-card language as the settings powercard:
-                // tonal surface + hairline outline. the old blurred-art
-                // backdrop + double gradient sat on top of the cava wave
-                // and read like a different shell — flat keeps it one
-                // system with the tray/CC popups
-                border.width: 1
-                border.color: Services.Colors.low
-
-                Column {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 16
-
-                    // header — art thumb, title/artist, app glyph
-                    Row {
-                        width: parent.width
-                        height: 72
-                        spacing: 12
-
-                        Rectangle {
-                            id: artFrame
-                            width: 72
-                            height: 72
-                            radius: 12
-                            color: Services.Colors.surfaceAlt
-                            clip: true
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            Image {
-                                anchors.fill: parent
-                                source: Services.Media.artUrl
-                                visible: Services.Media.artUrl !== ""
-                                fillMode: Image.PreserveAspectCrop
-                                smooth: true
-                                asynchronous: true
-                            }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                anchors.centerIn: parent
-                                visible: Services.Media.artUrl === ""
-                                text: "\uf385"
-                                font.pixelSize: 24
-                                color: Services.Colors.textMuted
-                            }
-                        }
-
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 84
-                            spacing: 5
-
-                            Row {
-                                width: parent.width
-                                spacing: 8
-
-                                Text {
-                                    font.family: Services.Fonts.family
-                                    width: Math.max(0, parent.width - appGlyph.width - 8)
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: Services.Media.title
-                                    color: Services.Colors.text
-                                    font.pixelSize: 15
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    font.family: Services.Fonts.family
-                                    id: appGlyph
-                                    text: Services.Media.appIcon
-                                    color: Services.Colors.accent
-                                    font.pixelSize: 14
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: Services.Media.artist
-                                color: Services.Colors.textMuted
-                                font.pixelSize: 12
-                            }
-                        }
-                    }
-
-                    // progress — elapsed/total flank a seekable track
-                    Row {
-                        width: parent.width
-                        height: 16
-                        spacing: 10
-
-                        Text {
-                            font.family: Services.Fonts.family
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Services.Media.formatTime(Services.Media.position)
-                            color: Services.Colors.textMuted
-                            font.pixelSize: 10
-                        }
-
-                        Item {
-                            id: track
-                            width: parent.width - 92
-                            height: 16
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width
-                                height: 6
-                                radius: 3
-                                color: Qt.rgba(Services.Colors.textMuted.r, Services.Colors.textMuted.g,
-                                               Services.Colors.textMuted.b, 0.18)
-                            }
-
-                            Rectangle {
-                                id: trackFill
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width * (Services.Media.length > 0
-                                        ? Services.Media.position / Services.Media.length : 0)
-                                height: 6
-                                radius: 3
-                                color: Services.Colors.accent
-
-                                // linear 1s glide — position ticks every
-                                // second, this turns the tick into motion
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: 1000
-                                        easing.type: Easing.Linear
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                id: trackThumb
-                                anchors.verticalCenter: parent.verticalCenter
-                                x: Math.max(5, trackFill.width - 5)
-                                width: 10
-                                height: 10
-                                radius: 5
-                                color: Services.Colors.accent
-                                scale: trackMa.containsMouse ? 1.4 : 1
-                                Behavior on scale {
-                                    SpringAnimation {
-                                        spring: Services.Motion.spatialFastSpring
-                                        damping: Services.Motion.spatialFastDamping
-                                    }
-                                }
-                            }
-
-                            MouseArea {
-                                id: trackMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Services.Media.seek(mouse.x / width)
-                            }
-                        }
-
-                        Text {
-                            font.family: Services.Fonts.family
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Services.Media.formatTime(Services.Media.length)
-                            color: Services.Colors.textMuted
-                            font.pixelSize: 10
-                        }
-                    }
-
-                    // transport — hover glides on the tonal circles
-                    Row {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 28
-
-                        Rectangle {
-                            id: prevBtn
-                            width: 40
-                            height: 40
-                            radius: 20
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
-                                           Services.Colors.text.b, prevMa.containsMouse ? 0.16 : 0.08)
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: Services.Motion.effectsFast
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                                }
-                            }
-                            scale: prevMa.pressed ? 0.9 : 1
-                            Behavior on scale {
-                                SpringAnimation {
-                                    spring: Services.Motion.popSpring
-                                    damping: Services.Motion.popDamping
-                                }
-                            }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                anchors.centerIn: parent
-                                text: "\uf4ae"
-                                font.pixelSize: 17
-                                color: Services.Colors.text
-                            }
-
-                            MouseArea {
-                                id: prevMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Services.Media.previous()
-                            }
-                        }
-
-                        Rectangle {
-                            id: playBtn
-                            width: 48
-                            height: 48
-                            radius: 24
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Services.Colors.accent
-                            scale: playMa.pressed ? 0.9 : 1
-                            Behavior on scale {
-                                SpringAnimation {
-                                    spring: Services.Motion.popSpring
-                                    damping: Services.Motion.popDamping
-                                }
-                            }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                anchors.centerIn: parent
-                                text: Services.Media.playing ? "\uf447" : "\uf44a"
-                                font.pixelSize: 20
-                                color: Services.Colors.background
-                            }
-
-                            MouseArea {
-                                id: playMa
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Services.Media.togglePlay()
-                            }
-                        }
-
-                        Rectangle {
-                            id: nextBtn
-                            width: 40
-                            height: 40
-                            radius: 20
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
-                                           Services.Colors.text.b, nextMa.containsMouse ? 0.16 : 0.08)
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: Services.Motion.effectsFast
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                                }
-                            }
-                            scale: nextMa.pressed ? 0.9 : 1
-                            Behavior on scale {
-                                SpringAnimation {
-                                    spring: Services.Motion.popSpring
-                                    damping: Services.Motion.popDamping
-                                }
-                            }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                anchors.centerIn: parent
-                                text: "\uf4b1"
-                                font.pixelSize: 17
-                                color: Services.Colors.text
-                            }
-
-                            MouseArea {
-                                id: nextMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Services.Media.next()
-                            }
-                        }
-                    }
-                }
-            }
-            } // mediaSizer
-
-            HyprlandFocusGrab {
-                windows: [mediaPopup]
-                active: mediaChip.expanded
-                onCleared: mediaChip.expanded = false
-            }
-        }
-
         // Advanced side panel — docks to the right of the pill. Same
         // animate-then-hide pattern, driven by advancedPanel. Separate
         // window because it needs real room for pair/trust/forget controls
@@ -2210,6 +2686,11 @@ Variants {
 
             property bool windowVisible: false
             visible: windowVisible
+
+            // Same as settingsPopup (below): give the popup's content Qt
+            // active focus the moment it maps, so an input inside (the wifi
+            // password row) isn't fighting the bar surface for it.
+            onVisibleChanged: if (visible) advPanel.forceActiveFocus()
 
             Connections {
                 target: Services.ControlCenter
@@ -2263,138 +2744,114 @@ Variants {
             }
         }
 
-        // Recording popup — anchor to rightGroup's left edge (shifted left
-        // by the in-pill tray slot).
-        PopupWindow {
-            id: recordingPopup
-            anchor.window: toplevel
-            anchor.rect.x: (toplevel.width + pill.width) / 2 - 12 - pill.traySlot - rightGroup.width
-            anchor.rect.y: pill.height + 4
-            implicitWidth: 260
-            implicitHeight: 300
-            color: "transparent"
+        // Updates + recording no longer have PopupWindows — they morph
+        // inside the pill (modes "updates" / "recording"), same recipe as
+        // media and the clock card: the pill mask + outsideCatcher do
+        // click-away, Esc goes through the pill's Keys handler, and the
+        // toplevel keyboardFocus predicate delivers keys.
 
-            property bool windowVisible: false
-            visible: windowVisible
-
-            Connections {
-                target: Services.ScreenRecording
-                function onOpenChanged() {
-                    if (toplevel.ownsOverlay(Services.ScreenRecording)) {
-                        recCloseTimer.stop()
-                        recordingPopup.windowVisible = true
-                    } else {
-                        recCloseTimer.restart()
-                    }
-                }
-            }
-
-            Timer {
-                id: recCloseTimer
-                interval: 270
-                onTriggered: {
-                    if (!Services.ScreenRecording.open)
-                        recordingPopup.windowVisible = false
-                }
-            }
-
-            Item {
-                id: recSizer
-                anchors.centerIn: parent
-                clip: true
-
-                width:  Services.ScreenRecording.open ? 260 : 0
-                height: Services.ScreenRecording.open ? 300 : 0
-
-                Behavior on width { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-                Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-
-                ScreenRecordingPopup {
-                    anchors.centerIn: parent
-                }
-            }
-        }
+        // Clock card: NO HyprlandFocusGrab. A grab and the Exclusive
+        // keyboardFocus predicate entry on the SAME surface fight in
+        // Hyprland — the grab installs a seat grab, the predicate's
+        // exclusive-keyboard commit displaces it, the seat grab's
+        // callback finishes the focus grab with sendCleared=true, and
+        // quickshell's onCleared closed the popup 76ms after opening
+        // (reproducible: open → cleared → closed, every time). Power/
+        // CC survive only because they are NOT in the predicate. The
+        // clock follows the launcher recipe instead: predicate delivers
+        // keyboard (it types every day), the full-surface mask +
+        // outsideCatcher handle click-away, Esc closes via the pill's
+        // Keys handler above.
 
         HyprlandFocusGrab {
-            windows: [recordingPopup]
-            active: toplevel.ownsOverlay(Services.ScreenRecording)
-            onCleared: Services.ScreenRecording.close()
-        }
-
-        // Updates popup — hangs under the updates activity chip, same
-        // anchoring pattern as mediaPopup (activityRow lives in toplevel
-        // coordinates, chip.x is its Row slot).
-        PopupWindow {
-            id: updatesPopup
-            anchor.window: toplevel
-            anchor.rect.x: activityRow.x + updatesChip.x
-            anchor.rect.y: pill.height + 4
-            implicitWidth: 280
-            implicitHeight: 380
-            color: "transparent"
-
-            property bool windowVisible: false
-            visible: windowVisible
-
-            Connections {
-                target: Services.Updates
-                function onOpenChanged() {
-                    if (toplevel.ownsOverlay(Services.Updates)) {
-                        updatesCloseTimer.stop()
-                        updatesPopup.windowVisible = true
-                    } else {
-                        updatesCloseTimer.restart()
-                    }
-                }
-            }
-
-            Timer {
-                id: updatesCloseTimer
-                interval: 270
-                onTriggered: {
-                    if (!Services.Updates.open)
-                        updatesPopup.windowVisible = false
-                }
-            }
-
-            Item {
-                id: updatesSizer
-                anchors.centerIn: parent
-                clip: true
-
-                width:  Services.Updates.open ? 280 : 0
-                height: Services.Updates.open ? 380 : 0
-
-                Behavior on width { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-                Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
-
-                UpdatesPopup {
-                    anchors.centerIn: parent
-                }
-            }
-        }
-
-        HyprlandFocusGrab {
-            windows: [updatesPopup]
-            active: toplevel.ownsOverlay(Services.Updates)
-            onCleared: Services.Updates.close()
-        }
-
-        HyprlandFocusGrab {
-            // clock card lives inside the pill (inside toplevel) now —
-            // same pattern as the ControlCenter/PowerMenu grabs.
-            windows: [toplevel]
-            active: toplevel.ownsOverlay(Services.ClockCard)
-            onCleared: Services.ClockCard.close()
-        }
-
-        HyprlandFocusGrab {
+            id: ccGrab
+            // Timestamp of the last advancedPanel change — onCleared uses
+            // it to tell the two clear flavors apart (see below).
+            property real flipAt: 0
             // toplevel instead of the old controlCenterPopup — the panel
             // lives inside the pill (inside toplevel) now. Same pattern as
             // the PowerMenu grab below, which faced this exact change earlier.
-            windows: [toplevel, controlCenterAdvancedPopup]
-            active: toplevel.ownsOverlay(Services.ControlCenter)
-            onCleared: Services.ControlCenter.close()
+            //
+            // While the ADVANCED popup is up it must be the ONLY whitelisted
+            // surface: with toplevel also in the set the compositor keeps
+            // keyboard on the bar layer surface (it never redirects focus
+            // just because a new popup maps), so the popup's password field
+            // received zero keystrokes. The settings popup types fine
+            // because ITS grab whitelists only that popup — same rule here.
+            // Closed → back to [toplevel] for the in-pill CC panel.
+            windows: Services.ControlCenter.advancedPanel !== ""
+                ? [controlCenterAdvancedPopup]
+                : [toplevel]
+
+            // `active` is driven imperatively, NOT by a declarative binding.
+            // quickshell writes active=false itself on every clear
+            // (onGrabCleared → setActive(false)), and the window-list flip
+            // above reliably produces one transient clear: the toplevel
+            // leaves the grab before the popup's surface is committed, so
+            // for a frame the grab is empty. That write destroys a
+            // declarative binding (its dependencies never change again, so
+            // it cannot re-evaluate) — the grab would stay dead while the
+            // panel is open and keyboard would never be confined to the
+            // popup. Every transition therefore re-arms explicitly: the
+            // destroy + recreate below also gives a FRESH activation, which
+            // is what makes the compositor move keyboard focus into the
+            // popup — settings gets its focus that same way on every open.
+            //
+            // onCleared must therefore DISTINGUISH clear flavors: the
+            // transient one lands within a frame or two of advancedPanel
+            // flipping (re-arm — the popup needs the grab to keep typing),
+            // while any later clear is the seat grab's dismissal signal —
+            // the user clicked or focused away, the exact mechanism the
+            // power menu closes on — so close everything. Before this
+            // timing guard, EVERY clear during the popup was re-armed and
+            // click-away silently did nothing.
+            onCleared: {
+                if (Services.ControlCenter.advancedPanel !== ""
+                    && Date.now() - ccGrab.flipAt < 250)
+                    // transient clear mid-flip — re-arm once settled
+                    Qt.callLater(function() {
+                        if (toplevel.ownsOverlay(Services.ControlCenter))
+                            ccGrab.active = true
+                    })
+                else
+                    Services.ControlCenter.close()
+            }
+        }
+
+        // Drives the grab above imperatively — a sibling, because
+        // HyprlandFocusGrab is a C++ type with no default property, so a
+        // declared child object is a load error ("Cannot assign to
+        // non-existent default property").
+        Connections {
+            target: Services.ControlCenter
+            function updateGrab() {
+                ccGrab.active = toplevel.ownsOverlay(Services.ControlCenter)
+            }
+            // the service's own onOpenChanged writes ownerScreen before
+            // these run (it connected at singleton creation), but the
+            // ownerScreen hook keeps the check honest either way
+            function onOpenChanged() {
+                updateGrab()
+                // Give the pill Qt active focus while the panel is up, so
+                // the pill's Keys.onPressed actually receives Escape —
+                // without an activeFocusItem inside the pill, key events
+                // land on the window root and bubble past it. The popup
+                // window focuses advPanel itself (onVisibleChanged there).
+                if (Services.ControlCenter.open && toplevel.ownsOverlay(Services.ControlCenter))
+                    Qt.callLater(() => pill.forceActiveFocus())
+            }
+            function onOwnerScreenChanged() { updateGrab() }
+            function onAdvancedPanelChanged() {
+                ccGrab.flipAt = Date.now()
+                if (!toplevel.ownsOverlay(Services.ControlCenter)) return
+                // let the grab's `windows` binding settle first, then
+                // destroy + recreate over the new list
+                Qt.callLater(function() {
+                    if (!toplevel.ownsOverlay(Services.ControlCenter)) return
+                    ccGrab.active = false
+                    ccGrab.active = true
+                })
+            }
         }
 
         // power menu no longer has its own PopupWindow — it morphs inside the pill

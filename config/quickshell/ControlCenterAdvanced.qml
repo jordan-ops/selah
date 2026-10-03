@@ -22,15 +22,69 @@ Rectangle {
     readonly property bool isNetwork: Services.ControlCenter.advancedPanel === "network"
     readonly property bool isBluetooth: Services.ControlCenter.advancedPanel === "bluetooth"
 
-    // Only scan while the network panel is actually the one showing — same
-    // idea as a Waybar wifi module only running `nmcli dev wifi list` while
-    // its menu is open, not on every poll tick. This used to be triggered by
-    // ControlCenterPanel.qml's quick popover; that's gone now, so this is
-    // the only place left that needs to own it.
+    // Esc closes the WHOLE control center (this popup + the pill) — same
+    // contract as Escape on the plain panel. Keys reach this handler
+    // because Bar.qml gives the popup content Qt active focus when it
+    // maps (onVisibleChanged → forceActiveFocus), and the password field
+    // bubbles anything it doesn't accept up the parent chain to here.
+    // The popup lives in its own window, so the pill's Keys handler can
+    // never see these events — it needs its own, or Escape dead-ends.
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Escape) {
+            Services.ControlCenter.close()
+            event.accepted = true
+        }
+    }
+
+    // Password-prompt state lives on the PANEL, not the row delegate. The
+    // model refreshes while scanning and ListViews reuse/destroy delegates
+    // on model churn — a delegate-owned flag was wiped right after
+    // connectionFailed fired, so the prompt never showed (or showed under
+    // a recycled row) even though the signal arrived. Keyed by the Network
+    // object; cleared when the panel closes/switches or on submit.
+    property var passwordTarget: null
+
+    function requestPassword(network) {
+        root.passwordTarget = network
+        // The list viewport is fixed-height and clipped — a row near the
+        // bottom would put the prompt below the fold, invisible. Bring it in.
+        const i = Services.Network.networks.indexOf(network)
+        if (i >= 0)
+            Qt.callLater(() => netAdvList.positionViewAtIndex(i, ListView.Contain))
+    }
+
+    // Re-seat the password row if scan churn/reorder pushes it out of the
+    // clipped viewport — positionViewAtIndex at request time races the model.
+    Timer {
+        interval: 300
+        repeat: true
+        running: root.passwordTarget !== null && root.isNetwork
+        onTriggered: {
+            const i = Services.Network.networks.indexOf(root.passwordTarget)
+            if (i < 0) return
+            const it = netAdvList.itemAtIndex(i)
+            if (!it || it.y < netAdvList.contentY
+                || it.y + it.height > netAdvList.contentY + netAdvList.height)
+                netAdvList.positionViewAtIndex(i, ListView.Contain)
+        }
+    }
+
+    // Only scan while the network/bluetooth panel is actually the one
+    // showing — same idea as a Waybar wifi module only running
+    // `nmcli dev wifi list` while its menu is open, not on every poll
+    // tick. The settings app's Network/Bluetooth pages hold their own
+    // visible lists too, so BOTH owners evaluate this same combined
+    // predicate: whoever fires last leaves the flags in the right state
+    // and they can never stomp each other.
     Connections {
         target: Services.ControlCenter
         function onAdvancedPanelChanged() {
-            Services.Network.scan(Services.ControlCenter.advancedPanel === "network")
+            const panel = Services.ControlCenter.advancedPanel
+            if (panel !== "network") root.passwordTarget = null
+            const setNet = Services.SettingsApp.open && Services.SettingsApp.page === "network"
+            const setBt = Services.SettingsApp.open && Services.SettingsApp.page === "bluetooth"
+            Services.Network.scan(panel === "network" || setNet)
+            Services.Bluetooth.scan(panel === "bluetooth" || setBt)
         }
     }
 
@@ -86,7 +140,7 @@ Rectangle {
             delegate: Rectangle {
                 required property var modelData
                 property bool isActive: Services.Volume.isCurrentSink(modelData)
-                width: parent.width
+                width: parent ? parent.width : 0
                 height: 44
                 radius: 8
                 color: isActive
@@ -115,6 +169,7 @@ Rectangle {
 
         // ---------------- NETWORK: full list, connect/forget/password ----
         ListView {
+            id: netAdvList
             visible: root.isNetwork
             width: parent.width
             height: parent.height - 40
@@ -134,15 +189,18 @@ Rectangle {
             delegate: Column {
                 id: netAdvRow
                 required property var modelData
-                property bool needsPassword: false
                 property string errorText: ""
-                width: parent.width
+                // parent is momentarily null while ListView recycles this
+                // delegate during scan churn — unguarded parent.width threw
+                // "Cannot read property 'width' of null" and broke layout.
+                width: parent ? parent.width : 0
                 spacing: 4
 
                 Connections {
                     target: netAdvRow.modelData
                     function onConnectionFailed(reason) {
-                        if (reason === ConnectionFailReason.NoSecrets) netAdvRow.needsPassword = true
+                        if (reason === ConnectionFailReason.NoSecrets)
+                            root.requestPassword(netAdvRow.modelData)
                         else netAdvRow.errorText = "Connection failed"
                     }
                 }
@@ -207,9 +265,27 @@ Rectangle {
                 }
 
                 Row {
-                    visible: netAdvRow.needsPassword
+                    visible: root.passwordTarget === netAdvRow.modelData
                     width: parent.width
                     spacing: 6
+
+                    // The popup window only ever gets keyboard focus from
+                    // the HyprlandFocusGrab in Bar.qml, and a field that
+                    // appears AFTER that focus settled never receives Qt
+                    // active focus on its own — keystrokes went nowhere
+                    // (same failure mode as the clipboard search field,
+                    // documented in Bar.qml). Grab focus the moment the
+                    // row shows up.
+                    onVisibleChanged: {
+                        if (visible) Qt.callLater(() => netAdvPw.forceActiveFocus())
+                    }
+                    // Scan churn rebuilds delegates constantly; a Row born
+                    // already-visible never fires onVisibleChanged, so the
+                    // focus grab below would silently never run and the
+                    // field would sit dead (keys went to the bar surface).
+                    Component.onCompleted: if (visible)
+                        Qt.callLater(() => netAdvPw.forceActiveFocus())
+
                     Rectangle {
                         width: parent.width - 40
                         height: 26
@@ -222,13 +298,29 @@ Rectangle {
                             id: netAdvPw
                             anchors { fill: parent; margins: 6 }
                             echoMode: TextInput.Password
+                            // kimi default (NetworkRow.qml:159 focus:
+                            // root.awaitingPassword) — declarative sibling
+                            // of the forceActiveFocus in the Row above.
+                            focus: root.passwordTarget === netAdvRow.modelData
                             font.pixelSize: 11
                             color: Services.Colors.text
                             clip: true
                             onAccepted: {
-                                netAdvRow.needsPassword = false
+                                root.passwordTarget = null
                                 Services.Network.connectToNetworkWithPsk(netAdvRow.modelData, netAdvPw.text)
                             }
+                        }
+                        // placeholder — TextInput has none, and an empty
+                        // dark box gives no affordance that it's a field
+                        Text {
+                            anchors { fill: parent; margins: 6 }
+                            visible: netAdvPw.text === ""
+                                && root.passwordTarget === netAdvRow.modelData
+                            text: "Password…"
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 11
+                            verticalAlignment: Text.AlignVCenter
+                            color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g, Services.Colors.text.b, 0.4)
                         }
                     }
                     Text {
@@ -239,7 +331,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                netAdvRow.needsPassword = false
+                                root.passwordTarget = null
                                 Services.Network.connectToNetworkWithPsk(netAdvRow.modelData, netAdvPw.text)
                             }
                         }
@@ -276,7 +368,7 @@ Rectangle {
 
             delegate: Rectangle {
                 required property var modelData
-                width: parent.width
+                width: parent ? parent.width : 0
                 height: 56
                 radius: 8
                 color: modelData.connected

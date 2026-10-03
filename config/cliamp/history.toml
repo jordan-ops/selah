@@ -1,13 +1,91 @@
 [[entry]]
-played_at = "2026-09-24T11:37:43Z"
+played_at = "2026-10-03T08:11:01Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
 genre = "pop"
 
 [[entry]]
-played_at = "2026-09-24T10:01:58Z"
+played_at = "2026-10-03T05:47:28Z"
 path = "http://5229.cloudrad.io:8316/;"
 title = "Capital FM"
+
+[[entry]]
+played_at = "2026-10-03T04:44:30Z"
+path = "https://anchor.fm/s/4fd26d48/podcast/play/42824154/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2021-10-4%2F5ac98570-debd-3a78-9ad5-5df8ee6deb0b.mp3"
+title = "Belladonna 🌷"
+artist = "Porn🍑Nerds"
+album = "Porn🍑Nerds"
+genre = "Leisure"
+track_number = 9
+duration_secs = 1358
+
+[[entry]]
+played_at = "2026-10-03T04:43:52Z"
+path = "https://anchor.fm/s/4fd26d48/podcast/play/28111596/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2021-2-6%2F60364594-2801-2e93-ba1a-c7c1e9c48705.mp3"
+title = "Sasha Grey 🍑"
+artist = "Porn🍑Nerds"
+album = "Porn🍑Nerds"
+genre = "Leisure"
+track_number = 2
+duration_secs = 2251
+
+[[entry]]
+played_at = "2026-10-03T04:42:33Z"
+path = "https://traffic.megaphone.fm/GLT6184961809.mp3?updated=1742595128"
+title = "#2285 - Andrew Schulz"
+artist = "The Joe Rogan Experience"
+album = "The Joe Rogan Experience"
+genre = "Comedy"
+duration_secs = 10668
+
+[[entry]]
+played_at = "2026-10-03T04:41:54Z"
+path = "https://dts.podtrac.com/redirect.mp3/pdst.fm/e/pfx.vpixl.com/6qj4J/pscrb.fm/rss/p/nyt.simplecastaudio.com/03d8b493-87fc-4bd1-931f-8a8e9b945d8a/episodes/0f75c972-f3e1-43b2-b75d-ed6e86ed2040/audio/128/default.mp3?aid=rss_feed&awCollectionId=03d8b493-87fc-4bd1-931f-8a8e9b945d8a&awEpisodeId=0f75c972-f3e1-43b2-b75d-ed6e86ed2040&feed=Sl5CSM3S"
+title = "The Sunday Read: ‘Who Is the Bad Art Friend?’"
+artist = "The Daily"
+album = "The Daily"
+genre = "Daily News"
+duration_secs = 4105
+
+[[entry]]
+played_at = "2026-10-03T04:41:24Z"
+path = "https://radio.cliamp.stream/chiptune/tracks/b7fecd8a02dfc97a"
+title = "Tea Fragrance"
+artist = "Adeline Yeo (HP)"
+album = "Colours Of India - Tea Fragrance"
+
+[[entry]]
+played_at = "2026-10-03T04:41:04Z"
+path = "https://radio.cliamp.stream/omarchy/tracks/a8be0b2aa8da555a"
+title = "Quattro Saves Mankind"
+artist = "Carlos Lisboa"
+album = "Omarchy"
+
+[[entry]]
+played_at = "2026-10-03T04:40:56Z"
+path = "https://radio.cliamp.stream/omarchy/tracks/75186a086f056673"
+title = "It's fucking fork o clock"
+artist = "Boyd"
+album = "Omarchy"
+
+[[entry]]
+played_at = "2026-10-03T04:40:48Z"
+path = "https://radio.cliamp.stream/omarchy/tracks/9a5501dc8bfe5544"
+title = "Omarchee, c'est la vie"
+artist = "Aurélien"
+album = "Omarchy"
+
+[[entry]]
+played_at = "2026-10-03T04:40:32Z"
+path = "https://radio.cliamp.stream/meditative/tracks/f8ddc558bad1a4b7"
+title = "Childhood Friends"
+artist = "Juhani Junkala"
+album = "JRPG Music Packs"
+
+[[entry]]
+played_at = "2026-10-03T04:40:16Z"
+path = "https://radio.cliamp.stream/meditative/tracks/52f3fcc73ebf024c"
+title = "Joth - Contemplation"
 
 [[entry]]
 played_at = "2026-09-24T09:14:32Z"

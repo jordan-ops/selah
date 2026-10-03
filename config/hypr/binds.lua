@@ -93,6 +93,7 @@ hl.bind(mainMod .. " + SHIFT + N",             hl.dsp.exec_cmd("qs ipc call nigh
 hl.bind(mainMod .. " + SHIFT + V",             hl.dsp.exec_cmd("qs ipc call clipboard toggle"))   -- clipboard history
 hl.bind(mainMod .. " + ALT + U",               hl.dsp.exec_cmd("qs ipc call updates toggle"))
 hl.bind(mainMod .. " + semicolon",             hl.dsp.exec_cmd("qs ipc call settingsapp toggle"))  -- settings app
+hl.bind(mainMod .. " + H",                     hl.dsp.exec_cmd("qs ipc call bar toggle"))          -- hide/show the bar (session-only)
 
 -- Full-screen screenshot to ~/Pictures/Screenshots + clipboard
 hl.bind("Print", hl.dsp.exec_cmd("bash ~/.local/bin/screenshot.sh"))

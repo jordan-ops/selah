@@ -743,6 +743,7 @@ FocusScope {
                     || e.type === "knobcard"
                     || e.type === "keybinds" || e.type === "xcompose"
                     || e.type === "animcard"
+                    || e.type === "netlist" || e.type === "btlist"
                 // right-side zone the label column must stay clear of
                 readonly property int ctlZone: {
                     switch (e.type) {
@@ -761,7 +762,9 @@ FocusScope {
                     case "knobcard":
                     case "keybinds":
                     case "xcompose":
-                    case "animcard":   return 40
+                    case "animcard":
+                    case "netlist":
+                    case "btlist":    return 40
                     default:          return 210
                     }
                 }
@@ -1031,6 +1034,8 @@ FocusScope {
                 Component { id: compBinds;    SettingsKeybindsEditor { e: row.e } }
                 Component { id: compCompose;  SettingsComposeEditor  { e: row.e } }
                 Component { id: compAnim;     SettingsAnimationsCard { e: row.e } }
+                Component { id: compNetList;  SettingsNetworksCard   { e: row.e } }
+                Component { id: compBtList;   SettingsBluetoothCard  { e: row.e } }
 
                 Loader {
                     id: loader
@@ -1057,6 +1062,8 @@ FocusScope {
                         case "keybinds":   return compBinds
                         case "xcompose":   return compCompose
                         case "animcard":   return compAnim
+                        case "netlist":    return compNetList
+                        case "btlist":     return compBtList
                         default:           return compSwatch
                         }
                     }

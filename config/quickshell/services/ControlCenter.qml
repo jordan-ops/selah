@@ -40,5 +40,12 @@ Singleton {
         target: "controlcenter"
         function toggle() { root.toggle() }
         function status(): bool { return root.open }
+        // deterministic open for the advanced side panel (toggle-in-toggle
+        // safe) — also used by scripts/QA to reach the network/bluetooth
+        // panels without synthetic clicks.
+        function openPanel(name: string) {
+            root.open = true
+            root.advancedPanel = name
+        }
     }
 }

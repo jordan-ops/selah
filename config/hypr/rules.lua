@@ -69,6 +69,17 @@ hl.window_rule({
     center = true,
 })
 
+-- mpv — always floats. Matched on class "^mpv$" so it catches both the
+-- native Wayland app_id and the XWayland class. Centering comes free from
+-- "center-floats" above (match = { float = true }), so no explicit center
+-- here. Leave this on: a tiled player only sizes itself to the video after
+-- the first frame, so it maps at 1x1 and then never re-tiles.
+hl.window_rule({
+    name   = "mpv-float",
+    match  = { class = "^mpv$" },
+    float  = true,
+})
+
 -- The launcher's Delete-key uninstall reopens itself under foot with a
 -- title like "Uninstall Foot" — float+center it like the dialog it is.
 -- Matched on TITLE, not class: foot IS the daily terminal
@@ -95,4 +106,20 @@ hl.window_rule({
 
     move  = "20 monitor_h-120",
     float = true,
+})
+
+-- The Omarchy screensaver (ported to ~/.local/bin/omarchy-launch-screensaver):
+-- a fullscreen float on its own special workspace. The launcher passes each
+-- monitor's workspace through the exec tag; this class rule is the fallback
+-- when a terminal maps again as it closes — out of sight, where its
+-- fullscreen rule can't take over a normal workspace (same rules omarchy
+-- ships in default/hypr/apps/system.lua).
+hl.window_rule({
+    name  = "screensaver",
+    match = { class = "org.omarchy.screensaver" },
+
+    fullscreen = true,
+    float      = true,
+    animation  = "slide",
+    workspace  = "special:screensaver silent",
 })

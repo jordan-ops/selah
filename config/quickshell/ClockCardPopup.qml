@@ -23,6 +23,14 @@ Rectangle {
     property var now: new Date()
     Timer { interval: 60000; running: true; repeat: true; onTriggered: root.now = new Date() }
 
+    // Focus helpers — called from Bar.qml's ClockCard Connections. The
+    // card opens with taskInput already focused (launcher search recipe:
+    // the bar is Exclusive while the card is open, so keys flow straight
+    // into the field), and closing it drops any half-typed task the same
+    // way the launcher drops its query.
+    function focusTaskInput() { taskInput.forceActiveFocus() }
+    function clearTaskInput() { taskInput.text = "" }
+
     readonly property int todayDate: now.getDate()
     readonly property int todayMonth: now.getMonth()
     readonly property int todayYear: now.getFullYear()

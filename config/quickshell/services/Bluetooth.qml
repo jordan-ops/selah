@@ -20,12 +20,21 @@ Singleton {
     }
 
     // Devices BlueZ already knows about on the default adapter — paired
-    // devices plus anything currently visible. ASSUMPTION: there's no
-    // confirmed startDiscovery()/scan() function on BluetoothAdapter, so
-    // this shows what's already tracked rather than actively hunting for
-    // brand-new nearby devices. Fine for a quick-connect picker; revisit
-    // if you need "pair a device I've never seen before" from this menu.
+    // devices plus anything currently visible. Now backed by real active
+    // discovery too: `scan(true)` (below) holds adapter.discovering while
+    // a device list is on screen, so brand-new nearby devices show up,
+    // not just what BlueZ had already tracked.
     readonly property var devices: adapter ? adapter.devices.values : []
+
+    // Active discovery — BlueZ holds it as a mode, not a one-shot, so
+    // the UI that shows a device list must hold `discovering` while its
+    // list is on screen and release it when the list goes away (same
+    // contract as Services.Network.scan for wifi).
+    readonly property bool discovering: adapter?.discovering ?? false
+
+    function scan(enabled) {
+        if (adapter && adapter.enabled) adapter.discovering = enabled
+    }
 
     function connectDevice(device) { device.connect() }
     function disconnectDevice(device) { device.disconnect() }

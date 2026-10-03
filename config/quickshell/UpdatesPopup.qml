@@ -6,7 +6,12 @@ Rectangle {
     width: 280
     height: 380
     radius: 18
-    color: Services.Colors.background
+    // In-pill card now (was a standalone popup window): tonal surface +
+    // hairline outline, the mediaCard language — `background` would vanish
+    // into the pill, which is exactly the background color.
+    color: Services.Colors.surface
+    border.width: 1
+    border.color: Services.Colors.low
 
     Column {
         anchors.fill: parent

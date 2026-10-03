@@ -28,8 +28,40 @@ Singleton {
     property var packages: []   // [{ name, oldVersion, newVersion, aur }]
     readonly property int count: packages.length
 
-    function toggle() { open = !open }
+    // The pill's modes are exclusive — opening the updates card dismisses
+    // the siblings so the mode chain can't show something else under the
+    // panel the user just asked for. Clipboard's openPanel recipe, plus
+    // Media (its card sits earlier in the mode chain) and the recording
+    // card — ScreenRecording is a direct call here rather than a
+    // Connections target: two singletons watching each other's `open` at
+    // instantiation time is a circular-creation hazard.
+    function openPanel() {
+        Launcher.closeLauncher()
+        Themes.closePicker()
+        Wallpapers.closePicker()
+        ControlCenter.close()
+        ClockCard.close()
+        Clipboard.close()
+        PowerMenu.open = false
+        Media.close()
+        ScreenRecording.close()
+        open = true
+    }
+    function toggle() { open ? close() : openPanel() }
     function close() { open = false }
+
+    // and the reverse: any sibling panel taking the pill closes the card,
+    // so `open` never sits true under another mode (which would make the
+    // activity chip and its keybind look dead)
+    function dismiss() { if (open) open = false }
+    Connections { target: Launcher;      function onOpenChanged() { if (Launcher.open) root.dismiss() } }
+    Connections { target: Themes;        function onOpenChanged() { if (Themes.open) root.dismiss() } }
+    Connections { target: Wallpapers;    function onOpenChanged() { if (Wallpapers.open) root.dismiss() } }
+    Connections { target: ControlCenter; function onOpenChanged() { if (ControlCenter.open) root.dismiss() } }
+    Connections { target: ClockCard;     function onOpenChanged() { if (ClockCard.open) root.dismiss() } }
+    Connections { target: Clipboard;     function onOpenChanged() { if (Clipboard.open) root.dismiss() } }
+    Connections { target: PowerMenu;     function onOpenChanged() { if (PowerMenu.open) root.dismiss() } }
+    Connections { target: Media;         function onOpenChanged() { if (Media.open) root.dismiss() } }
 
     // ---- monthly nudge gate for the bar's activity chip ----
     // The check itself can keep running every 30 min (read-only, no

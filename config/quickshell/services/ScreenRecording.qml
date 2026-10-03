@@ -60,8 +60,37 @@ Singleton {
         }
     }
 
-    function toggle() { root.open = !root.open }
+    // The pill's modes are exclusive — opening the recording card dismisses
+    // the siblings so the mode chain can't show something else under the
+    // panel the user just asked for. Updates is a direct call here rather
+    // than a Connections target: two singletons watching each other's `open`
+    // at instantiation time is a circular-creation hazard.
+    function openPanel() {
+        Launcher.closeLauncher()
+        Themes.closePicker()
+        Wallpapers.closePicker()
+        ControlCenter.close()
+        ClockCard.close()
+        Clipboard.close()
+        PowerMenu.open = false
+        Media.close()
+        Updates.close()
+        root.open = true
+    }
+    function toggle() { root.open ? root.close() : root.openPanel() }
     function close() { root.open = false }
+
+    // and the reverse: any sibling panel taking the pill closes the card,
+    // so `open` never sits true under another mode
+    function dismiss() { if (root.open) root.open = false }
+    Connections { target: Launcher;      function onOpenChanged() { if (Launcher.open) root.dismiss() } }
+    Connections { target: Themes;        function onOpenChanged() { if (Themes.open) root.dismiss() } }
+    Connections { target: Wallpapers;    function onOpenChanged() { if (Wallpapers.open) root.dismiss() } }
+    Connections { target: ControlCenter; function onOpenChanged() { if (ControlCenter.open) root.dismiss() } }
+    Connections { target: ClockCard;     function onOpenChanged() { if (ClockCard.open) root.dismiss() } }
+    Connections { target: Clipboard;     function onOpenChanged() { if (Clipboard.open) root.dismiss() } }
+    Connections { target: PowerMenu;     function onOpenChanged() { if (PowerMenu.open) root.dismiss() } }
+    Connections { target: Media;         function onOpenChanged() { if (Media.open) root.dismiss() } }
 
     // ── Recording state ────────────────────────────────────────────────
     property bool recording: false
@@ -535,7 +564,7 @@ Singleton {
             root.audioMic = mic
             root.audioSystem = system
         }
-        function open(): void { root.open = true }
+        function open(): void { root.openPanel() }
         function close(): void { root.open = false }
         function status(): string {
             return JSON.stringify({
