@@ -274,6 +274,18 @@ Singleton {
           description: "Global drives shell + compositor · each side also alone",
           keywords: "animation motion speed spring bounce tween quickshell shell hyprland compositor window workspace global enable disable slow fast reduce" },
 
+        // ————————————————— shell decoration effects (motion-gated) ————————————————
+        { id: "fxRipple", page: "animations", type: "switch",
+          key: "effects.ripple",
+          label: "Desktop ripples",
+          description: "Ripple rings where the desktop is clicked · motion + game mode gates still apply",
+          keywords: "ripple click ring effect decoration desktop water pulse shell" },
+        { id: "fxEdgeLight", page: "animations", type: "switch",
+          key: "effects.edgelight",
+          label: "Notification edge glow",
+          description: "Accent light sweeping around the bar pill when a notification lands",
+          keywords: "notification glow edge light bar pill alert effect decoration shell" },
+
         // ————————————————— Mouse & Touchpad (omasettings §11) —————————————————
 
         { id: "ptrNumlock", page: "pointer", type: "hyprswitch",

@@ -30,7 +30,11 @@ Singleton {
     readonly property bool moving: alive && ripples.some(r => now - r.t0 < lifeMs)
 
     function spawn(screenName, x, y, amp) {
-        if (!Motion.motionOn || GameMode.enabled)
+        // motion + game mode are gates; effects.ripple is the explicit
+        // on/off switch (Settings ▸ Animations, `qs ipc call settings set
+        // effects.ripple false`) — it also silences this test hook
+        if (!Motion.motionOn || GameMode.enabled
+            || !Settings.get("effects.ripple", true))
             return
         const t = Date.now()
         // switching screens starts a fresh pool — old slots would be in

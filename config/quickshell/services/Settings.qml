@@ -18,7 +18,11 @@ Singleton {
         Quickshell.env("HOME") + "/.local/state/quickshell/settings.json"
 
     // raw store — defaults live here, loaded file merges over them
-    property var values: ({ "bar.restStyle": "compact" })
+    property var values: ({
+        "bar.restStyle": "compact",
+        "effects.ripple": true,
+        "effects.edgelight": true
+    })
 
     // typed accessor for keys the shell binds on — one line per new key
     readonly property string barRestStyle: values["bar.restStyle"] || "compact"

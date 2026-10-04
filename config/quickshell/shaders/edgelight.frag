@@ -1,5 +1,10 @@
 // Adapted from Nebula shell (GPL-3.0), shaders/edgelight.frag —
 // kept as the documented source for the compiled edgelight.frag.qsb beside it.
+// Selah re-hinged it onto the BAR PILL: the distance field is the pill's
+// rounded rect (barRect, global coordinates, corner radius) instead of the
+// screen edge, so the light orbits the bar itself. The ambient wash is
+// damped on the inside of the outline so the pill's own notification text
+// never gets tinted.
 // Compiled: qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 (must match Qt's
 // built-in ShaderEffect vertex profile — wider variant sets fail to link)
 #version 450
@@ -20,25 +25,34 @@ layout(std140, binding = 0) uniform buf {
     float radius;
     float tailA;
     float tailB;
+    vec4 barRect;
 };
 
-float edgeDistance(vec2 p) {
-    vec2 half_ = itemSize * 0.5;
-    vec2 q = abs(p - half_) - (half_ - vec2(radius));
-    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-    return -sd;
+// signed distance to the pill's rounded rect: barRect = (x, y, w, h),
+// radius = corner radius (negative inside, as usual for an SDF)
+float pillSd(vec2 p) {
+    vec2 c = barRect.xy + barRect.zw * 0.5;
+    vec2 half_ = barRect.zw * 0.5;
+    vec2 q = abs(p - c) - (half_ - vec2(radius));
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
 }
 
 void main() {
     vec2 p = qt_TexCoord0 * itemSize;
-    float e = edgeDistance(p);
-    if (e < -1.0) {
+    float sd = pillSd(p);
+    // distance from the outline, measured on both sides — the core band
+    // straddles the pill edge; the bleed reaches into the wallpaper
+    float e = abs(sd);
+    float reach = max(glow * 1.6, thick + 2.0);
+    if (e > reach) {
         fragColor = vec4(0.0);
         return;
     }
-    e = max(e, 0.0);
 
-    vec2 d = p - itemSize * 0.5;
+    // orbit position: 0 = above the pill, clockwise; same convention the
+    // screen version used, now around the pill's centre
+    vec2 c = barRect.xy + barRect.zw * 0.5;
+    vec2 d = p - c;
     float t = fract(atan(d.x, -d.y) / 6.28318530718 - angle / 6.28318530718);
 
     float head = min(tailB + 0.10, 0.99);
@@ -53,7 +67,9 @@ void main() {
 
     float light = mask * sweep * (core + soft * 0.75);
     float spark = hot * mask * sweep * core * 0.55;
-    float ambient = halo * wash;
+    // ambient wash only outside the outline — inside sits the pill with
+    // the notification text; smoothstep softens the cut over ~1.5 px
+    float ambient = halo * wash * smoothstep(-1.5, 1.5, sd);
 
     float a = clamp(light + ambient, 0.0, 1.0);
     vec3 rgb = tint.rgb * a + vec3(spark);

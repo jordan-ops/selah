@@ -204,6 +204,29 @@ Variants {
         // on one surface is the fight described above).
         WlrLayershell.keyboardFocus: (Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.Clipboard.open || Services.ClockCard.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+        // Live global geometry of the pill — pushed into services/BarMetrics
+        // for EdgeLight's orbit glow (and re-pushed whenever the pill
+        // morphs, the tray slot changes or content width moves it).
+        readonly property rect pillGlobal: Qt.rect(
+            (toplevel.screen.x ?? 0) + pill.x,
+            (toplevel.screen.y ?? 0) + pill.y,
+            pill.width, pill.height)
+        function publishPill() {
+            Services.BarMetrics.update(modelData.name, {
+                x: pillGlobal.x, y: pillGlobal.y,
+                w: pillGlobal.width, h: pillGlobal.height,
+                r: pill.morphRadius })
+        }
+        Component.onCompleted: publishPill()
+        Connections {
+            target: toplevel
+            function onPillGlobalChanged() { toplevel.publishPill() }
+        }
+        Connections {
+            target: pill
+            function onMorphRadiusChanged() { toplevel.publishPill() }
+        }
+
         Rectangle{
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
