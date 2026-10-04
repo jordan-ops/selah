@@ -577,6 +577,16 @@ Variants {
             Connections {
                 target: Services.Notifications
                 function onNewNotification(notification) { pill.showNotification(notification) }
+                // the pill's copy is about to be freed — null it (and
+                // morph back) before quickshell deletes the object, or
+                // the click handler below would invoke a dead
+                // notification and segfault the shell
+                function onNotificationClosed(notification) {
+                    if (pill.currentNotification !== notification) return
+                    pill.currentNotification = null
+                    pill.notifVisible = false
+                    notifTimer.stop()
+                }
             }
 
             // drives keyboard focus into the search field the moment the launcher opens,

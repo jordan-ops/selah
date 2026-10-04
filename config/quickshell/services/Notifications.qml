@@ -18,6 +18,15 @@ Singleton {
     // since `list` also changes on dismiss/expire and we only want to react to arrivals
     signal newNotification(var notification)
 
+    // fired when quickshell is about to destroy a notification object (its
+    // `closed` signal — expiry, action invoke, dismiss, remote close all
+    // funnel through it). The object is deleted the moment these handlers
+    // return, so every surface still holding it has to let go in the same
+    // tick: history is plain JS, so nothing else would ever prune the
+    // pointer — and clicking a row/chip that still pointed at the freed
+    // object is what segfaulted the shell.
+    signal notificationClosed(var notification)
+
     // Click handler shared by the bar pill and the history rows: invokes
     // the notification's "default" action, or its first action — this is
     // what turns a click on "Screenshot taken" into tensaku opening.
@@ -110,6 +119,14 @@ Singleton {
 
         onNotification: function(notification) {
             notification.tracked = true   // must set this, or it's discarded immediately
+            // drop it from the center (and let the pill know) the instant
+            // quickshell closes it — runs BEFORE the delete, so the rows'
+            // bindings re-evaluate while the object is still alive and no
+            // delegate is left holding a dead reference
+            notification.closed.connect(function() {
+                root.removeHistory(notification)
+                root.notificationClosed(notification)
+            })
             root.history = [notification].concat(root.history).slice(0, 50)
             root.newNotification(notification)
         }
