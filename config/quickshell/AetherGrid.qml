@@ -152,6 +152,22 @@ Item {
         }
     }
 
+    // Infinite scroll: when the viewport reaches the tail of the loaded
+    // results (or the first page is too short to scroll at all), ask the
+    // service for the next page — it appends below what is loaded, like
+    // wallhaven.cc. This replaced the old ◀ ▶ pager. All signals funnel
+    // into whMore(), which ignores the call while a fetch is already in
+    // flight, and the guard re-runs when contentHeight moves again, so a
+    // burst of signals can never queue duplicate pages.
+    function maybeLoadMore() {
+        if (grid.atYEnd) Services.Aether.whMore()
+    }
+    Connections {
+        target: grid
+        function onAtYEndChanged() { root.maybeLoadMore() }
+        function onContentHeightChanged() { root.maybeLoadMore() }
+    }
+
     // Empty / loading states — "no items" must always say WHY. Sibling of the
     // GridView: a child of a Flickable scrolls with the content, which would
     // send the hint off-screen on an empty grid.

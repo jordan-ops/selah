@@ -151,6 +151,11 @@ Singleton {
     property int whLastPage: 1
     property int whTotal: 0
     property bool whSearching: false
+    // true while the in-flight whSearchProc run should APPEND its page to
+    // whItems instead of replacing them (infinite scroll). Set immediately
+    // before running=true and consumed by the parse, so it always describes
+    // the run that just finished.
+    property bool whAppending: false
     property string whLoadedFor: ""   // "sorting|query" behind whItems
 
     // ==================================================================
@@ -521,21 +526,37 @@ Singleton {
     function whSearch() {
         if (view !== "wallhaven") return
         if (whSearchProc.running) { whDirty = true; return }
+        whAppending = false
         whSearching = true
         whSearchProc.q = filter.trim()
         whSearchProc.sorting = whSorting
         whSearchProc.pg = 1
         whSearchProc.running = true
     }
-    function whPageTo(p) {
-        const pg = Math.max(1, Math.min(whLastPage, p))
-        if (pg === whPage && whItems.length) return
-        if (whSearchProc.running) return
-        whPage = pg
+
+    // Infinite scroll (replaces the old ◀ ▶ pager): AetherGrid calls this
+    // when the viewport reaches the end of the loaded results. One page at
+    // a time; the next page is requested speculatively (whPage only advances
+    // when the response echoes it back), so a failed fetch retries the same
+    // page instead of skipping it. New searches/sortings reset to page 1 via
+    // whSearch() and replace the list as before.
+    //
+    // A call that lands while a fetch is still exiting (stdout already
+    // closed and parsed, QProcess not yet reaped — observed on slow
+    // wallhaven responses) parks in whMorePending and replays at exit,
+    // otherwise the grid's one-shot signal would be lost and the next page
+    // would never load until the user scrolled again.
+    property bool whMorePending: false
+    function whMore() {
+        if (view !== "wallhaven") return
+        if (whSearchProc.running) { whMorePending = true; return }
+        if (whPage >= whLastPage) { whMorePending = false; return }
+        whMorePending = false
+        whAppending = true
         whSearching = true
         whSearchProc.q = filter.trim()
         whSearchProc.sorting = whSorting
-        whSearchProc.pg = pg
+        whSearchProc.pg = whPage + 1
         whSearchProc.running = true
     }
     property bool whDirty: false
@@ -911,7 +932,7 @@ Singleton {
                 try {
                     const d = JSON.parse(text)
                     if (Array.isArray(d.wallpapers)) {
-                        root.whItems = d.wallpapers.map(w => ({
+                        const items = d.wallpapers.map(w => ({
                             name: (w.resolution ? w.resolution + "  " : "") + (w.id || ""),
                             path: w.path || "",
                             previewPath: w.thumbnailPath || w.thumbURL || "",
@@ -920,16 +941,29 @@ Singleton {
                             size: 1
                         }))
                         if (d.meta) {
-                            root.whPage = d.meta.current_page || 1
+                            // append runs speculatively (whPage is not
+                            // advanced before the request), so fall back to
+                            // the page actually requested if the echo is
+                            // missing — otherwise page 2 would re-request
+                            root.whPage = d.meta.current_page || whSearchProc.pg
                             root.whLastPage = d.meta.last_page || 1
                             root.whTotal = d.meta.total || 0
                         }
                         root.whLoadedFor = whSearchProc.sorting + "|" + whSearchProc.q
                         root.whSearching = false
-                        root.currentIndex = 0
+                        if (root.whAppending) {
+                            // infinite scroll: grow the list in place — the
+                            // selection and the grid's scroll position must
+                            // not jump when the new page lands under it
+                            root.whAppending = false
+                            root.whItems = root.whItems.concat(items)
+                        } else {
+                            root.whItems = items
+                            root.currentIndex = 0
+                            if (root.whItems.length) Qt.callLater(extractTimer.restart)
+                        }
                         root.rebuildModel()
                         root.statusMsg = root.whItems.length === 0 ? "no wallhaven results" : ""
-                        if (root.whItems.length) Qt.callLater(extractTimer.restart)
                     } else if (d.error) {
                         root.statusMsg = String(d.error)
                     }
@@ -944,6 +978,12 @@ Singleton {
             if (root.whDirty) {
                 root.whDirty = false
                 Qt.callLater(() => root.whSearch())
+            }
+            // a whMore() that arrived during this run's exit window replays
+            // now that the proc is genuinely free (see whMorePending)
+            if (root.whMorePending) {
+                root.whMorePending = false
+                Qt.callLater(() => root.whMore())
             }
         }
     }
@@ -1089,6 +1129,8 @@ Singleton {
         function openGroup(name: string): void { root.openGroup(name) }
         function setFilter(q: string): void { root.setFilter(q) }
         function setSorting(s: string): void { root.setSorting(s) }
+        // testing hook: what the grid's scroll trigger calls
+        function whNext(): void { root.whMore() }
         function setMode(m: string): void { root.setExtractMode(m) }
         function preset(name: string): void { root.applyPreset(name) }
         function clearPreset(): void { root.clearPreset() }

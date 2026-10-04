@@ -21,7 +21,7 @@
 //   arrows / pgup / pgdn / home / end   move the selection
 //   enter                               create the theme AND apply it
 //   ctrl+enter                          create only (leave the desktop alone)
-//   a..z, backspace                     filter / search (live, in the box)
+//   a..z / space, backspace            filter / search (live, in the box)
 //   ctrl+1 / 2 / 3                      Themes | Local | Wallhaven
 //   ctrl+l                              light / dark palette
 //   ctrl+r                              rescan
@@ -225,7 +225,10 @@ Variants {
                 if (ch && ch.length === 1
                         && !(mod & (Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))) {
                     const code = ch.charCodeAt(0)
-                    if (code > 32 && code !== 127) {     // printable only
+                    // printable only, space included (32) — multi-word
+                    // wallhaven queries go through as typed; the query is
+                    // trimmed when it is sent, never while it is typed
+                    if (code >= 32 && code !== 127) {
                         e.accepted = true
                         aether.setFilter(aether.filter + ch)
                     }
@@ -574,44 +577,11 @@ Variants {
                         }
                     }
 
-                    Row {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 6
-                        visible: win.aether.view === "wallhaven" && win.aether.whLastPage > 1
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: win.aether.whSearching ? "searching ..."
-                                : "page " + win.aether.whPage + " / " + win.aether.whLastPage
-                            color: Services.Colors.textMuted
-                            font.family: Services.Fonts.family
-                            font.pixelSize: 12
-                        }
-                        Repeater {
-                            model: ["◀", "▶"]
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: 28; height: 28; radius: 7
-                                color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
-                                               Services.Colors.text.b, 0.08)
-                                border.color: Services.Colors.low
-                                border.width: 1
-                                Text {
-                                    font.family: Services.Fonts.family
-                                    anchors.centerIn: parent
-                                    text: modelData
-                                    color: Services.Colors.textMuted
-                                    font.pixelSize: 12
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: win.aether.whPageTo(
-                                        win.aether.whPage + (modelData === "▶" ? 1 : -1))
-                                }
-                            }
-                        }
-                    }
+                    // (no pager here anymore: wallhaven results load on
+                    // scroll — the grid asks for the next page when the
+                    // viewport reaches the end and the page appends below
+                    // the loaded one, like wallhaven.cc itself. The footer
+                    // still says "searching ..." while a page is in flight.)
 
                     // --- rename / delete the selected theme ---------------
                     // Sits opposite the wallhaven pager, which is only ever
