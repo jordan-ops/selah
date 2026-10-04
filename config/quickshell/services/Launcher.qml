@@ -85,6 +85,23 @@ Singleton {
         }
     }
 
+    // --- emoji (":" mode) ---------------------------------------------------
+    // assets/emoji.json is the [{ch, name, kw}] set adapted from Nebula
+    // (GPL-3.0); FileView loads it once and re-reads it on change. Rows
+    // carry `glyph` so the Bar delegate paints the character itself in
+    // Noto Color Emoji instead of looking up an icon that doesn't exist.
+    property var emoji: []
+    FileView {
+        path: Quickshell.shellPath("assets/emoji.json")
+        watchChanges: true
+        printErrors: false
+        onLoaded: {
+            try { root.emoji = JSON.parse(text()) }
+            catch (e) { root.emoji = [] }
+        }
+        onFileChanged: reload()
+    }
+
     // settings.json arrays — edit the file or drive it via
     // `qs ipc call settings set launcher.fav '["firefox"]'`
     function strList(key) {
@@ -195,6 +212,22 @@ Singleton {
             icon: pageMeta(e.page).icon,
             execute: () => SettingsApp.show(e.page, e.id)
         }))
+    }
+
+    // ":" scopes to the emoji list — substring match on name + keywords,
+    // capped at 40 so the pill never runs away; Enter copies the character
+    if (q.startsWith(":")) {
+        const s = q.slice(1).trim()
+        return root.emoji
+            .filter(e => s === "" || (e.name + " " + (e.kw || "")).toLowerCase().includes(s))
+            .slice(0, 40)
+            .map(e => ({
+                name: e.name,
+                comment: e.ch,
+                icon: "",
+                glyph: e.ch,
+                execute: () => Quickshell.execDetached(["wl-copy", e.ch])
+            }))
     }
 
     // plain query → installed apps only (hidden filtered out, favourites

@@ -1135,15 +1135,19 @@ Variants {
                         // placeholder: TextInput has no placeholderText of
                         // its own, so it's a zero-hit child painted over the
                         // text origin — clicks fall through to the input.
-                        // Spells out the two query languages: plain text is
+                        // Spells out the query languages: plain text is
                         // apps only, ">" switches to the settings catalog,
-                        // and a math expression gets an answer row on top.
+                        // ":" to the emoji list, and a math expression gets
+                        // an answer row on top. width+elide so the hint
+                        // truncates instead of running under the clip.
                         Text {
                             font.family: Services.Fonts.family
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
+                            width: searchField.width
+                            elide: Text.ElideRight
                             visible: searchField.text === ""
-                            text: "apps — \">\" settings — or type math"
+                            text: "apps — \">\" settings — \":\" emoji — math"
                             color: Services.Colors.text
                             opacity: 0.45
                             font.pixelSize: 14
@@ -1198,10 +1202,12 @@ Variants {
                     color: Services.Colors.text
                     opacity: 0.6
                     font.pixelSize: 12
-                    // ">" queries can only ever match settings rows, plain
-                    // queries only apps — name the right haystack
+                    // each prefix has exactly one haystack — name the one
+                    // that was actually searched
                     text: Services.Launcher.query.trim().startsWith(">")
                         ? "No settings match"
+                        : Services.Launcher.query.trim().startsWith(":")
+                        ? "No emoji match"
                         : "No apps match"
                 }
 
@@ -1237,8 +1243,20 @@ Variants {
 
                             IconImage {
                                 implicitSize: 24
+                                visible: !modelData.glyph
                                 source: modelData.icon !== "" ? Quickshell.iconPath(modelData.icon, true) : ""
                                 anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            // ":" emoji rows carry the character itself —
+                            // painted in the color emoji font, since no
+                            // theme icon exists for it
+                            Text {
+                                visible: !!modelData.glyph
+                                anchors.verticalCenter: parent.verticalCenter
+                                font.family: "Noto Color Emoji"
+                                font.pixelSize: 20
+                                text: modelData.glyph || ""
                             }
 
                             Text {
