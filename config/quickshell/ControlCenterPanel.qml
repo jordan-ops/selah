@@ -5,7 +5,9 @@
 import "./modules"
 import "./services" as Services
 import QtQuick
+import Quickshell
 import Quickshell.Networking
+import Quickshell.Widgets
 
 // Visual language matches the settings window and the bar revamp: solid
 // accent = ON (same as a selected choice chip), surface = idle, springs
@@ -33,26 +35,36 @@ Rectangle {
     // are plain `background`, pixel-identical to before.
     color: Services.Colors.panel
 
-    // Mirror Services.Notifications.history into histModel with row-level
-    // edits. The service reassigns the whole array on arrival, which a
-    // ListView reads as a model RESET — delegates get destroyed and
-    // recreated at their final positions, so add/displaced/remove
-    // transitions never run (verified against a recording: cards popped
-    // in with no drop). Row inserts/removes fire the real signals and
-    // the bounce plays.
+    // Mirror Services.Notifications.history into grpModel as ONE ROW PER
+    // APP (a group's slot follows its newest member, so a fresh message
+    // bumps that group to the top). The service reassigns the whole array
+    // on arrival, which a ListView reads as a model RESET — delegates get
+    // destroyed and recreated at their final positions, so add/displaced/
+    // remove transitions never run (verified against a recording: cards
+    // popped in with no drop). Row inserts/removes/moves fire the real
+    // signals and the bounce plays. Rows hold no notifications: each
+    // delegate reads notifsFor(name) in a binding, so any history change
+    // refreshes a group's contents without disturbing its row slot.
     function syncHistory() {
-        const h = Services.Notifications.history
-        // rows whose object left the history (Clear all, 50-cap):
+        const keys = Services.Notifications.groupNames()
+        // groups that lost every member (dismissed / Clear all):
         // remove transition fades each out in place
-        for (let i = histModel.count - 1; i >= 0; i--)
-            if (h.indexOf(histModel.get(i).notif) === -1)
-                histModel.remove(i)
-        // history is newest-first/prepend-only, so align from the top:
-        // a new head inserts as row 0 (add transition drops it in with
-        // the bounce spring) and every row below it displace-springs
-        for (let i = 0; i < h.length; i++)
-            if (i >= histModel.count || histModel.get(i).notif !== h[i])
-                histModel.insert(i, { "notif": h[i] })
+        for (let i = grpModel.count - 1; i >= 0; i--)
+            if (keys.indexOf(grpModel.get(i).name) === -1)
+                grpModel.remove(i)
+        // align from the top: a new group inserts as row i (add
+        // transition drops it in with the bounce spring), an existing
+        // group whose newest member jumped the queue slides into place
+        // (displaced spring), rows below displace-spring
+        for (let i = 0; i < keys.length; i++) {
+            let j = -1
+            for (let k = i; k < grpModel.count; k++)
+                if (grpModel.get(k).name === keys[i]) { j = k; break }
+            if (j === i) continue
+            if (j === -1) grpModel.insert(i, { "name": keys[i], "expanded": true })
+            else grpModel.move(j, i, 1)
+        }
+        while (grpModel.count > keys.length) grpModel.remove(grpModel.count - 1)
     }
 
     // If the whole panel closes (Bar.qml's animate-then-hide), close the
@@ -535,7 +547,9 @@ Rectangle {
                     font.family: Services.Fonts.family
                     id: notifTitle
 
-                    text: "Notifications" + (historyList.count > 0 ? "  " + historyList.count : "")
+                    // total notifications, not group rows — "3" means three
+                    // messages even when they're folded into one app header
+                    text: "Notifications" + (Services.Notifications.history.length > 0 ? "  " + Services.Notifications.history.length : "")
                     color: Services.Colors.text
                     font.pixelSize: 14
                     font.bold: true
@@ -579,11 +593,11 @@ Rectangle {
 
             }
 
-            // row-level mirror of Services.Notifications.history (see
-            // root.syncHistory) — the transitions below need real row
+            // one row per app, mirrored from Services.Notifications.history
+            // (see root.syncHistory) — the transitions below need real row
             // inserts/removes, not array resets
             ListModel {
-                id: histModel
+                id: grpModel
 
                 Component.onCompleted: root.syncHistory()
             }
@@ -601,11 +615,11 @@ Rectangle {
                 height: parent.height - 144   // vitals card + title row
                 clip: true
                 spacing: 8
-                model: histModel
+                model: grpModel
 
                 // M3 spec motion (m3.material.io/styles/motion): new cards
-                // ENTER by dropping one row up into the top slot (56px row
-                // + 8 spacing = 64) — the slide rides the bounce spring
+                // ENTER by dropping one row up into the top slot (the 64px
+                // drop) — the slide rides the bounce spring
                 // (overshoots its slot and settles, M3E spatial = springs)
                 // while the fade keeps emphasized decelerate; removals
                 // accelerate out with no bounce; rows pushed aside spring
@@ -661,64 +675,194 @@ Rectangle {
                     font.pixelSize: 12
                 }
 
+                // one group per app: header (icon, name, count, caret) with
+                // the app's messages folded underneath. Click the header to
+                // expand/collapse, right-click it to dismiss the whole
+                // group; left-click a message runs its default action (same
+                // path as the bar pill), right-click dismisses just it.
                 delegate: Rectangle {
+                    id: groupCard
+
                     width: historyList.width
-                    height: 56
                     radius: 10
                     color: Services.Colors.surface
 
+                    // this app's messages, newest-first — a binding on the
+                    // service's history, so a dismiss refreshes the group's
+                    // contents without a row-model update
+                    readonly property var notifs: Services.Notifications.notifsFor(model.name)
+                    readonly property string appIcon: notifs.length > 0 ? notifs[0].appIcon : ""
+                    readonly property bool open: model.expanded
+
+                    // header (always) + folded rows when open; the spring
+                    // makes expand/collapse settle like the pill morph
+                    height: headerRow.height + notifsCol.height + (notifsCol.height > 0 ? 6 : 0)
+                    Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
+
                     Row {
+                        id: headerRow
                         anchors.left: parent.left
                         anchors.right: parent.right
+                        anchors.top: parent.top
                         anchors.leftMargin: 10
                         anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
+                        height: 40
                         spacing: 8
 
-                        Text {
-                            font.family: Services.Fonts.family
-                            text: "󰂚"
-                            font.pixelSize: 14
-                            color: Services.Colors.accent
+                        Item {
+                            width: 18
+                            height: 18
                             anchors.verticalCenter: parent.verticalCenter
-                        }
 
-                        Column {
-                            width: parent.width - 24
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
+                            IconImage {
+                                anchors.fill: parent
+                                source: groupCard.appIcon !== "" ? Quickshell.iconPath(groupCard.appIcon, true) : ""
+                                visible: source !== ""
+                            }
 
+                            // fallback bell for senders with no icon — the
+                            // glyph the old per-notification rows used
                             Text {
+                                anchors.centerIn: parent
+                                text: "󰂚"
                                 font.family: Services.Fonts.family
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: model.notif.summary
-                                color: Services.Colors.text
                                 font.pixelSize: 12
-                                font.bold: true
+                                color: Services.Colors.accent
+                                visible: groupCard.appIcon === ""
                             }
-
-                            Text {
-                                font.family: Services.Fonts.family
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: model.notif.body
-                                color: Services.Colors.textMuted
-                                font.pixelSize: 11
-                            }
-
                         }
 
+                        Text {
+                            id: appNameText
+                            font.family: Services.Fonts.family
+                            text: model.name
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: Services.Colors.text
+                            anchors.verticalCenter: parent.verticalCenter
+                            // absorbs the slack so pill + caret pin right
+                            width: Math.max(40, parent.width - 18 - countPill.width - caret.width - parent.spacing * 3)
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            id: countPill
+                            height: 16
+                            radius: 8
+                            width: countLabel.width + 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: Services.Colors.background
+
+                            Text {
+                                id: countLabel
+                                anchors.centerIn: parent
+                                text: groupCard.notifs.length
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 10
+                                font.bold: true
+                                color: Services.Colors.accent
+                            }
+                        }
+
+                        Text {
+                            id: caret
+                            font.family: Services.Fonts.family
+                            text: ""
+                            font.pixelSize: 11
+                            color: Services.Colors.textMuted
+                            anchors.verticalCenter: parent.verticalCenter
+                            rotation: groupCard.open ? 0 : -90   // ▼ open, ▶ closed
+                        }
                     }
 
-                    // same code path as the bar pill: click a history row to
-                    // run the notification's default action (screenshot → tensaku)
+                    // click = expand/collapse, right-click = dismiss the
+                    // whole group — sits over the header band only, so the
+                    // message rows keep their own handlers
                     MouseArea {
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: headerRow.height
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: Services.Notifications.invokeDefault(model.notif)
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton)
+                                Services.Notifications.dismissApp(model.name)
+                            else
+                                grpModel.setProperty(index, "expanded", !groupCard.open)
+                        }
                     }
 
+                    Column {
+                        id: notifsCol
+                        anchors.top: headerRow.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        spacing: 0
+
+                        Rectangle {
+                            width: parent.width
+                            height: 1
+                            color: Services.Colors.background
+                            visible: groupCard.open && groupCard.notifs.length > 0
+                        }
+
+                        // empty model when folded — the column collapses to
+                        // 0 height and the card's height spring animates it
+                        Repeater {
+                            model: groupCard.open ? groupCard.notifs : []
+
+                            delegate: Rectangle {
+                                width: notifsCol.width
+                                height: nTexts.height + 10
+                                color: "transparent"
+
+                                Column {
+                                    id: nTexts
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    // aligns under the app name (icon gutter)
+                                    anchors.leftMargin: 36
+                                    anchors.rightMargin: 10
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 1
+
+                                    Text {
+                                        font.family: Services.Fonts.family
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        text: modelData.summary
+                                        visible: modelData.summary !== ""
+                                        color: Services.Colors.text
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+
+                                    Text {
+                                        font.family: Services.Fonts.family
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        text: modelData.body
+                                        visible: modelData.body !== ""
+                                        color: Services.Colors.textMuted
+                                        font.pixelSize: 10
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: (mouse) => {
+                                        if (mouse.button === Qt.RightButton)
+                                            Services.Notifications.dismissNotification(modelData)
+                                        else
+                                            Services.Notifications.invokeDefault(modelData)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
             }

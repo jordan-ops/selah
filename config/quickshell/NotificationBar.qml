@@ -136,6 +136,9 @@ PanelWindow {
 
                 MouseArea {
                     anchors.fill: parent
+                    // left dismisses (as always) and right-click dismisses
+                    // too — every notification surface shares that gesture
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: card.closeCard(false)
                 }
             }

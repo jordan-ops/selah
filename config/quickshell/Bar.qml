@@ -1107,14 +1107,24 @@ Variants {
             }
 
             // clicking the notification message runs its default action —
-            // e.g. "Screenshot taken" → opens the shot in tensaku. Sibling
-            // overlay on notificationContent, disabled whenever the pill has
-            // morphed back so it can't eat clicks in other pill modes.
+            // e.g. "Screenshot taken" → opens the shot in tensaku;
+            // right-click dismisses it now instead of waiting out
+            // notifTimer. Sibling overlay on notificationContent, disabled
+            // whenever the pill has morphed back so it can't eat clicks in
+            // other pill modes.
             MouseArea {
                 anchors.fill: notificationContent
                 enabled: pill.mode === "notif"
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: Qt.PointingHandCursor
-                onClicked: Services.Notifications.invokeDefault(pill.currentNotification)
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) {
+                        Services.Notifications.dismissNotification(pill.currentNotification)
+                        pill.notifVisible = false   // morph back immediately
+                    } else {
+                        Services.Notifications.invokeDefault(pill.currentNotification)
+                    }
+                }
             }
 
             // the REAL search input AND results list now live here, in the same

@@ -35,6 +35,61 @@ Singleton {
         target.invoke()
     }
 
+    // ---- group + dismiss helpers (notification center + right-click) ----
+
+    // group key for one notification: the app name, with a fallback so a
+    // sloppy sender can't scatter its messages across "Unknown"/""/null
+    function appName(n) { return (n && n.appName) ? n.appName : "Unknown" }
+
+    // one app's history entries, newest-first — the center's group rows
+    // read this in a binding, so any history change (arrival, dismiss,
+    // clear) refreshes their contents without a model update
+    function notifsFor(app) {
+        const h = root.history, out = []
+        for (let i = 0; i < h.length; i++)
+            if (appName(h[i]) === app) out.push(h[i])
+        return out
+    }
+
+    // unique app names, ordered by their newest member — a fresh message
+    // bumps its group to the top of the center
+    function groupNames() {
+        const h = root.history, seen = {}, keys = []
+        for (let i = 0; i < h.length; i++) {
+            const k = appName(h[i])
+            if (!seen[k]) { seen[k] = true; keys.push(k) }
+        }
+        return keys
+    }
+
+    // take a notification out of the center's log. Runs BEFORE dismiss()
+    // so no delegate is left mid-read of an object we just closed.
+    function removeHistory(n) {
+        const idx = root.history.indexOf(n)
+        if (idx === -1) return
+        const h = root.history.slice()
+        h.splice(idx, 1)
+        root.history = h
+    }
+
+    // right-click dismiss: close the live notification AND drop it from
+    // the center — dismissing from either surface means gone from both
+    function dismissNotification(n) {
+        if (!n) return
+        root.removeHistory(n)
+        n.dismiss()
+    }
+
+    // right-click a group header: dismiss every notification from that app
+    function dismissApp(app) {
+        const keep = [], h = root.history
+        for (let i = 0; i < h.length; i++) {
+            if (appName(h[i]) === app) h[i].dismiss()
+            else keep.push(h[i])
+        }
+        root.history = keep
+    }
+
     NotificationServer {
         id: server
         bodySupported: true
@@ -57,6 +112,22 @@ Singleton {
         function invokeLatest(): void {
             if (root.history.length > 0)
                 root.invokeDefault(root.history[0])
+        }
+
+        // same code path as a right-click dismiss — clear the center
+        // without a mouse (test passes, scripts)
+        function dismissLatest(): void {
+            if (root.history.length > 0)
+                root.dismissNotification(root.history[0])
+        }
+
+        // same code path as the center's "Clear all" pill
+        function clear(): void {
+            root.history = []
+        }
+
+        function count(): int {
+            return root.history.length
         }
     }
 }
