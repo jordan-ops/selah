@@ -29,9 +29,13 @@ ShellRoot{
 
     Background{}
     Bar{ barVisible: root.barVisible; onUnhideRequested: root.barVisible = true }
+    TuckTabs{}         // stash strip on the screen edge — qs ipc call tuck tuck (SUPER+T)
     LockScreen{}
     AetherPicker{}   // aether wallpaper/palette overlay — qs ipc call aether toggle
     RepoUpdatePopup{}   // "a new deploy is ready" dialog — qs ipc call updates status
+    EdgeLight{}      // notification edge glow — qs ipc call edgelight test
+    ThemeFlip{}      // frozen-frame theme-switch reveal — qs ipc call themeflip test
+    CheatSheet{}     // keybinding cheat sheet — qs ipc call cheatsheet toggle (SUPER + /)
     // Polkit prompt merged into the bar (pill "polkit" mode in Bar.qml,
     // like the launcher) — PolkitDialog.qml deprecated, kept as reference.
     // MediaBar{}

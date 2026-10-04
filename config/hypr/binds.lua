@@ -94,6 +94,9 @@ hl.bind(mainMod .. " + SHIFT + V",             hl.dsp.exec_cmd("qs ipc call clip
 hl.bind(mainMod .. " + ALT + U",               hl.dsp.exec_cmd("qs ipc call updates toggle"))
 hl.bind(mainMod .. " + semicolon",             hl.dsp.exec_cmd("qs ipc call settingsapp toggle"))  -- settings app
 hl.bind(mainMod .. " + H",                     hl.dsp.exec_cmd("qs ipc call bar toggle"))          -- hide/show the bar (session-only)
+hl.bind(mainMod .. " + T",                     hl.dsp.exec_cmd("qs ipc call tuck tuck"))           -- stash the focused window
+hl.bind(mainMod .. " + SHIFT + T",             hl.dsp.exec_cmd("qs ipc call tuck restoreLast"))     -- bring the stash back
+hl.bind(mainMod .. " + slash",                 hl.dsp.exec_cmd("qs ipc call cheatsheet toggle"))    -- keybind cheat sheet
 
 -- Full-screen screenshot to ~/Pictures/Screenshots + clipboard
 hl.bind("Print", hl.dsp.exec_cmd("bash ~/.local/bin/screenshot.sh"))
