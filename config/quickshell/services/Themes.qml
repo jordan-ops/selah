@@ -109,6 +109,13 @@ Singleton {
     // still lands, the system theme always settles on what's selected.
     property string pendingApply: ""
 
+    // ThemeFlip.qml hangs the frozen-frame reveal off these: started
+    // fires once per switch, before the script starts and before anything
+    // on screen changes; finished fires only when nothing else is queued
+    // — pending applies re-enter apply() first and fire started again.
+    signal applyStarted()
+    signal applyFinished()
+
     function apply(name) {
         if (!name) return
         currentTheme = name
@@ -118,6 +125,7 @@ Singleton {
             return
         }
         pendingApply = ""
+        applyStarted()
         applyProc.command = ["bash", Quickshell.shellDir + "/scripts/switch-theme.sh", name]
         applyProc.running = true
     }
@@ -213,6 +221,8 @@ Singleton {
                 const n = root.pendingApply
                 root.pendingApply = ""
                 root.apply(n)
+            } else {
+                root.applyFinished()
             }
         }
     }
