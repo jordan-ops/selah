@@ -11,6 +11,13 @@
 # colors.toml holds (verified key-for-key against `--generate`'s output). So
 # the derived shades, accent and orange/brown hues are aether's, not ours.
 #
+# wallhaven.cc is deliberately NOT searched through aether either: its
+# `--search-wallhaven` silently ignores --ratios, --top-range and --seed
+# (verified live: identical, unfiltered results with and without them), so
+# the complete filter set lives in wallhaven.py beside this script. This
+# script only resolves `--wallhaven` into a local file and then walks the
+# unchanged pipeline below.
+#
 # The result is materialised as a NEW theme under ~/.config/themes/ and handed
 # to switch-theme.sh — the ONE path this setup already trusts, and the same one
 # every existing theme goes through:
@@ -37,6 +44,10 @@
 #   aether-apply.sh <wallpaper> --add-to <theme>
 #                   add the wallpaper to an existing theme's backgrounds/
 #                   (never touches colors.toml — an add is never a change)
+#   aether-apply.sh --wallhaven <query...> [wallhaven filters] [options]
+#                   search wallhaven.cc, download one result, then the exact
+#                   same pipeline as a local wallpaper; --add-to works too
+#                   (fetch first, then add)
 
 set -euo pipefail
 
@@ -44,26 +55,66 @@ usage() {
     cat >&2 <<'EOF'
 usage: aether-apply.sh <wallpaper> [options]
        aether-apply.sh <wallpaper> --add-to <theme>
+       aether-apply.sh --wallhaven <query...> [wallhaven filters] [options]
 
   --mode <mode>      aether extraction mode (default: material)
   --light             build a light palette
   --palette '<json>'  16 hex colours; skips extraction (what the picker sends)
   --no-apply          create the theme without switching to it
   --add-to <theme>    copy the wallpaper into an existing theme's backgrounds/
+
+wallhaven mode: search wallhaven.cc, download one result, then the SAME
+pipeline as a local wallpaper — --mode/--light/--palette/--no-apply behave
+identically, and --add-to is allowed (it fetches first, then adds; an add
+still never touches colors.toml):
+  --wallhaven <words>  every non-flag word is the query; wallhaven syntax
+                      (~tag, -exclude, id:, @user, #id) passes through
+  --categories 111    general/anime/people bitmask (default: 111)
+  --purity 100        sfw/sketchy/nsfw bitmask (default: 100; sketchy and
+                      nsfw need an API key)
+  --sorting <how>     date_added|relevance|random|views|favorites|toplist
+  --order <dir>       desc (default) | asc
+  --top-range <r>     1d|3d|1w|1M|1y|all (only with --sorting toplist)
+  --at-least WxH      minimum resolution, e.g. 2560x1440
+  --ratios <list>     comma list of aspect ratios, e.g. 16x9,21x9
+  --colors <list>     comma list of colours, rrggbb or #rrggbb
+  --page N            results page (default: 1)
+  --seed <str>        forwarded to the API's random sorting
+  --pick <p>          first | random (default) | N — which result to take.
+                      Chosen CLIENT-SIDE from the fetched page: wallhaven
+                      currently ignores server-side seeds (checked live), so
+                      --seed cannot make the random pick reproducible
+  --api-key <key>     wallhaven API key (default: $WALLHAVEN_API_KEY)
 EOF
     exit 1
 }
 
 [ $# -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; esac
-WP="$1"
-shift
 
 MODE="material"
 LIGHT=""
 NO_APPLY=0
 PALETTE=""
 ADD_TO=""
+
+# --wallhaven replaces the <wallpaper> argument: every remaining word that is
+# not a known flag becomes the search query, so `--wallhaven mountains night
+# --at-least 2560x1440` works with no quoting even mid-query. The wallpaper
+# itself is fetched further down, right before the shared [ -f "$WP" ] check.
+WH_MODE=0
+WH_QUERY=""
+WH_ARGS=()
+WH_KEY=""
+PICK="random"
+if [ "$1" = "--wallhaven" ]; then
+    WH_MODE=1
+    shift
+else
+    WP="$1"
+    shift
+fi
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode)    [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
@@ -71,22 +122,120 @@ while [ $# -gt 0 ]; do
         --no-apply) NO_APPLY=1; shift ;;
         --palette) [ $# -ge 2 ] || usage; PALETTE="$2"; shift 2 ;;
         --add-to)  [ $# -ge 2 ] || usage; ADD_TO="$2"; shift 2 ;;
+        --categories|--purity|--sorting|--order|--top-range|--at-least|--ratios|--colors|--page|--seed)
+            # Collected verbatim and replayed into `wallhaven.py search`, so
+            # the names here and there cannot drift. Only meaningful with
+            # --wallhaven; used otherwise they are a mistake, and a mistake
+            # should print usage instead of vanishing silently.
+            [ "$WH_MODE" -eq 1 ] || usage
+            [ $# -ge 2 ] || usage
+            WH_ARGS+=("$1" "$2")
+            shift 2 ;;
+        --pick)
+            [ "$WH_MODE" -eq 1 ] || usage
+            [ $# -ge 2 ] || usage
+            PICK="$2"
+            shift 2 ;;
+        --api-key)
+            [ "$WH_MODE" -eq 1 ] || usage
+            [ $# -ge 2 ] || usage
+            WH_ARGS+=("--apikey" "$2")   # wallhaven.py spells the flag --apikey
+            WH_KEY="$2"                  # download needs the key too: the
+                                         # /w/<id> record of a sketchy/nsfw
+                                         # result is guest-blocked without it
+            shift 2 ;;
         -h|--help) usage ;;
-        *)         usage ;;
+        *)
+            if [ "$WH_MODE" -eq 1 ]; then
+                # Double-dash words are flags and a typo must be loud;
+                # everything else — including wallhaven's single-dash
+                # -exclude terms — is query text.
+                case "$1" in --*) usage ;; esac
+                WH_QUERY="${WH_QUERY:+$WH_QUERY }$1"
+                shift
+            else
+                usage
+            fi ;;
     esac
 done
+
+if [ "$WH_MODE" -eq 1 ] && [ -z "$WH_QUERY" ]; then
+    usage    # --wallhaven with nothing to search for
+fi
 
 HOME_DIR="${HOME:?HOME is not set}"
 THEMES_DIR="$HOME_DIR/.config/themes"
 SWITCH="$HOME_DIR/.config/quickshell/scripts/switch-theme.sh"
 MARKER=".aether-generated"
 PY="python3"
+# wallhaven.py sits beside this script; the $HOME/.config/quickshell/scripts
+# spelling matches how SWITCH and toml2colors.py are found, and
+# ~/.config/quickshell IS this repo (a symlink), so it is the copy edited here.
+WH_PY="$HOME_DIR/.config/quickshell/scripts/wallhaven.py"
 
-[ -f "$WP" ] || { echo "aether-apply: no such wallpaper: $WP" >&2; exit 1; }
 command -v aether >/dev/null 2>&1 || {
     echo "aether-apply: 'aether' is not on PATH (yay -S aether)" >&2; exit 1
 }
 command -v "$PY" >/dev/null 2>&1 || { echo "aether-apply: python3 missing" >&2; exit 1; }
+
+# --- resolve the wallpaper ---------------------------------------------------
+# A local path has to exist already; --wallhaven turns a search into one
+# first. Either way the pipeline below sees a plain existing file, and the
+# [ -f "$WP" ] check stays a single shared guard for both modes.
+if [ "$WH_MODE" -eq 1 ]; then
+    [ -f "$WH_PY" ] || { echo "aether-apply: missing $WH_PY" >&2; exit 1; }
+
+    # Validate --pick BEFORE the search so a typo costs no API call.
+    case "$PICK" in
+        first|random) ;;
+        ''|*[!0-9]*)
+            echo "aether-apply: --pick wants first, random or a number: $PICK" >&2
+            exit 1 ;;
+    esac
+
+    # One search, one page: the count and the chosen id are read from the
+    # SAME document, so pick N can never drift from the list that named it.
+    if ! WH_RESULT="$("$PY" "$WH_PY" search "$WH_QUERY" --json \
+            "${WH_ARGS[@]}")"; then
+        echo "aether-apply: wallhaven search failed for '$WH_QUERY'" >&2
+        exit 1
+    fi
+
+    COUNT="$(printf '%s' "$WH_RESULT" | "$PY" -c \
+        'import json,sys; print(len(json.load(sys.stdin).get("results", [])))')"
+    [ "$COUNT" -ge 1 ] || {
+        echo "aether-apply: wallhaven found nothing for '$WH_QUERY'" >&2; exit 1; }
+
+    # --pick is resolved CLIENT-SIDE on the fetched page: wallhaven currently
+    # regenerates random seeds server-side (checked live — it ignores even
+    # its own issued seeds), so a server-side shuffle could not be
+    # reproduced anyway. --seed is still forwarded by wallhaven.py for when
+    # the API honours it again.
+    case "$PICK" in
+        first)  IDX=1 ;;
+        random) IDX=$(( (RANDOM % COUNT) + 1 )) ;;
+        *)      IDX=$((10#$PICK)) ;;
+    esac
+    if [ "$IDX" -lt 1 ] || [ "$IDX" -gt "$COUNT" ]; then
+        echo "aether-apply: --pick $IDX outside the 1..$COUNT results" >&2
+        exit 1
+    fi
+
+    IDX0=$((IDX - 1))
+    WH_ID="$(printf '%s' "$WH_RESULT" | "$PY" -c \
+        "import json,sys; print(json.load(sys.stdin)['results'][$IDX0]['id'])")"
+    echo "aether-apply: wallhaven pick $IDX/$COUNT -> $WH_ID"
+    WH_DL=(download "$WH_ID")
+    if [ -n "$WH_KEY" ]; then
+        WH_DL+=(--apikey "$WH_KEY")
+    fi
+    if ! WP="$("$PY" "$WH_PY" "${WH_DL[@]}")"; then
+        echo "aether-apply: wallhaven download failed for $WH_ID" >&2
+        exit 1
+    fi
+fi
+
+[ -f "$WP" ] || { echo "aether-apply: no such wallpaper: $WP" >&2; exit 1; }
 
 case "$WP" in
     *.*) EXT="${WP##*.}" ;;
