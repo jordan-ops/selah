@@ -35,6 +35,17 @@ Singleton {
         target.invoke()
     }
 
+    // actions worth a chip under a message row: blank text = the implicit
+    // "default" marker (clicking the row already runs it) — everything
+    // with a real label gets a button
+    function chipsFor(notification) {
+        if (!notification || !notification.actions) return []
+        const acts = notification.actions, out = []
+        for (let i = 0; i < acts.length; i++)
+            if (acts[i].text) out.push(acts[i])
+        return out
+    }
+
     // ---- group + dismiss helpers (notification center + right-click) ----
 
     // group key for one notification: the app name, with a fallback so a
@@ -119,6 +130,13 @@ Singleton {
         function dismissLatest(): void {
             if (root.history.length > 0)
                 root.dismissNotification(root.history[0])
+        }
+
+        // same code path as clicking an action chip in the center
+        function invokeChip(): void {
+            if (root.history.length === 0) return
+            const chips = root.chipsFor(root.history[0])
+            if (chips.length > 0) chips[0].invoke()
         }
 
         // same code path as the center's "Clear all" pill

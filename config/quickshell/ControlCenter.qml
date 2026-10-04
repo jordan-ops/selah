@@ -23,5 +23,6 @@ Singleton {
     IpcHandler {
         target: "controlcenter"
         function toggle() { root.toggle() }
+        function status(): bool { return root.open }
     }
 }

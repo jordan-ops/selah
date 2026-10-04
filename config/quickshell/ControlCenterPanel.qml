@@ -7,6 +7,7 @@ import "./services" as Services
 import QtQuick
 import Quickshell
 import Quickshell.Networking
+import Quickshell.Services.Notifications
 import Quickshell.Widgets
 
 // Visual language matches the settings window and the bar revamp: solid
@@ -694,6 +695,14 @@ Rectangle {
                     readonly property string appIcon: notifs.length > 0 ? notifs[0].appIcon : ""
                     readonly property bool open: model.expanded
 
+                    // drives the badge on the app icon — a folded group
+                    // still tells you something urgent is inside
+                    readonly property bool hasCritical: {
+                        for (let i = 0; i < notifs.length; i++)
+                            if (notifs[i].urgency === NotificationUrgency.Critical) return true
+                        return false
+                    }
+
                     // header (always) + folded rows when open; the spring
                     // makes expand/collapse settle like the pill morph
                     height: headerRow.height + notifsCol.height + (notifsCol.height > 0 ? 6 : 0)
@@ -729,6 +738,21 @@ Rectangle {
                                 font.pixelSize: 12
                                 color: Services.Colors.accent
                                 visible: groupCard.appIcon === ""
+                            }
+
+                            // urgent dot on the icon corner — surfaces
+                            // critical content even when the group is
+                            // folded shut
+                            Rectangle {
+                                visible: groupCard.hasCritical
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                width: 7
+                                height: 7
+                                radius: 4
+                                color: Services.Colors.critical
+                                border.width: 1.5
+                                border.color: Services.Colors.surface
                             }
                         }
 
@@ -817,6 +841,36 @@ Rectangle {
                                 height: nTexts.height + 10
                                 color: "transparent"
 
+                                // declared first so it stacks UNDER the
+                                // action chips: a chip takes its own click,
+                                // plain text still falls through to
+                                // invoke/dismiss as before
+                                MouseArea {
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: (mouse) => {
+                                        if (mouse.button === Qt.RightButton)
+                                            Services.Notifications.dismissNotification(modelData)
+                                        else
+                                            Services.Notifications.invokeDefault(modelData)
+                                    }
+                                }
+
+                                // critical entries carry a red rail in the
+                                // icon gutter — scannable in a stack of
+                                // near-identical rows
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 3
+                                    height: Math.max(0, nTexts.height - 4)
+                                    radius: 1.5
+                                    visible: modelData.urgency === NotificationUrgency.Critical
+                                    color: Services.Colors.critical
+                                }
+
                                 Column {
                                     id: nTexts
                                     anchors.left: parent.left
@@ -833,7 +887,11 @@ Rectangle {
                                         elide: Text.ElideRight
                                         text: modelData.summary
                                         visible: modelData.summary !== ""
-                                        color: Services.Colors.text
+                                        // urgency tints the headline: critical
+                                        // pushes, low stays out of the way
+                                        color: modelData.urgency === NotificationUrgency.Critical ? Services.Colors.critical
+                                             : modelData.urgency === NotificationUrgency.Low ? Services.Colors.textMuted
+                                             : Services.Colors.text
                                         font.pixelSize: 11
                                         font.bold: true
                                     }
@@ -847,17 +905,46 @@ Rectangle {
                                         color: Services.Colors.textMuted
                                         font.pixelSize: 10
                                     }
-                                }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: (mouse) => {
-                                        if (mouse.button === Qt.RightButton)
-                                            Services.Notifications.dismissNotification(modelData)
-                                        else
-                                            Services.Notifications.invokeDefault(modelData)
+                                    // the sender's own actions as tonal
+                                    // pills — 0 height when it offered none
+                                    Item {
+                                        width: parent.width
+                                        height: chipRow.implicitHeight > 0 ? chipRow.implicitHeight + 5 : 0
+
+                                        Row {
+                                            id: chipRow
+                                            y: 5
+                                            spacing: 6
+
+                                            Repeater {
+                                                model: Services.Notifications.chipsFor(modelData)
+
+                                                delegate: Rectangle {
+                                                    width: chipLabel.width + 16
+                                                    height: 20
+                                                    radius: 10
+                                                    color: chipArea.pressed ? Services.Colors.accent : Services.Colors.background
+
+                                                    Text {
+                                                        id: chipLabel
+                                                        anchors.centerIn: parent
+                                                        text: modelData.text
+                                                        font.family: Services.Fonts.family
+                                                        font.pixelSize: 10
+                                                        font.bold: true
+                                                        color: chipArea.pressed ? Services.Colors.background : Services.Colors.accent
+                                                    }
+
+                                                    MouseArea {
+                                                        id: chipArea
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: modelData.invoke()
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

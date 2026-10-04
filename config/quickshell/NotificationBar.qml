@@ -47,6 +47,13 @@ PanelWindow {
 
                 property bool pendingExpire: false
 
+                // hover holds the auto-close: the remaining time banks on
+                // enter and the clock resumes with it on leave, so reading
+                // a long card never races the timer
+                property real expireTotal: modelData.expireTimeout > 0 ? modelData.expireTimeout * 1000 : 5000
+                property real expireLeft: expireTotal
+                property real expireT0: Date.now()
+
                 property color accent: {
                     if (modelData.urgency === NotificationUrgency.Critical) return Services.Colors.critical
                     if (modelData.urgency === NotificationUrgency.Low) return Services.Colors.low
@@ -129,7 +136,8 @@ PanelWindow {
                 }
 
                 Timer {
-                    interval: modelData.expireTimeout > 0 ? modelData.expireTimeout * 1000 : 5000
+                    id: expireTimer
+                    interval: Math.max(500, card.expireLeft)
                     running: true
                     onTriggered: card.closeCard(true)
                 }
@@ -137,8 +145,20 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     // left dismisses (as always) and right-click dismisses
-                    // too — every notification surface shares that gesture
+                    // too — every notification surface shares that gesture.
+                    // Hover banks the auto-close clock: entering stops the
+                    // timer at its remaining time, leaving resumes it.
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    hoverEnabled: true
+                    onEntered: {
+                        if (!expireTimer.running) return
+                        card.expireLeft = Math.max(500, expireTimer.interval - (Date.now() - card.expireT0))
+                        expireTimer.stop()
+                    }
+                    onExited: {
+                        card.expireT0 = Date.now()
+                        expireTimer.restart()
+                    }
                     onClicked: card.closeCard(false)
                 }
             }

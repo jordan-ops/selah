@@ -545,12 +545,17 @@ Variants {
                 onTriggered: pill.osdVisible = false
             }
 
-            // same shape as showOsd()/osdTimer above — morph in, hold, morph back
+            // same shape as showOsd()/osdTimer above — morph in, hold, morph
+            // back. notifT0 anchors the hover bank (see the MouseArea below).
             function showNotification(notification) {
                 pill.currentNotification = notification
                 pill.notifVisible = true
+                notifTimer.interval = 4000
+                pill.notifT0 = Date.now()
                 notifTimer.restart()
             }
+
+            property real notifT0: Date.now()
 
             Timer {
                 id: notifTimer
@@ -1109,14 +1114,26 @@ Variants {
             // clicking the notification message runs its default action —
             // e.g. "Screenshot taken" → opens the shot in tensaku;
             // right-click dismisses it now instead of waiting out
-            // notifTimer. Sibling overlay on notificationContent, disabled
-            // whenever the pill has morphed back so it can't eat clicks in
-            // other pill modes.
+            // notifTimer. Hovering banks the 4s clock the same way the
+            // popup card does — leave and it resumes with time left.
+            // Sibling overlay on notificationContent, disabled whenever
+            // the pill has morphed back so it can't eat clicks in other
+            // pill modes.
             MouseArea {
                 anchors.fill: notificationContent
                 enabled: pill.mode === "notif"
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
+                onEntered: {
+                    if (notifTimer.running)
+                        notifTimer.interval = Math.max(500, notifTimer.interval - (Date.now() - pill.notifT0))
+                    notifTimer.stop()
+                }
+                onExited: {
+                    pill.notifT0 = Date.now()
+                    notifTimer.restart()
+                }
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
                         Services.Notifications.dismissNotification(pill.currentNotification)
