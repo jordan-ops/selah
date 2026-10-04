@@ -267,10 +267,9 @@ Rectangle {
 
             }
 
-            // 3x3 bento grid of tiles — nine cells, eight used (one empty
-            // bottom-right). Left click toggles; right click on
-            // Network/Bluetooth/Audio opens the matching advanced window
-            // (one click to the real controls).
+            // 3x3 bento grid of tiles — nine cells, nine used. Left click
+            // toggles; right click on Network/Bluetooth/Audio opens the
+            // matching advanced window (one click to the real controls).
             Grid {
                 id: toggleGrid
 
@@ -379,6 +378,20 @@ Rectangle {
                     label: "Keep Awake"
                     active: Services.KeepAwake.active
                     onToggled: Services.KeepAwake.toggle()
+                }
+
+                // Screen saver on/off — omarchy's screensaver-off flag,
+                // the file `omarchy toggle screensaver` writes. Off also
+                // kills a running saver on the spot: every pipes.sh
+                // terminal is animation CPU this tile exists to silence.
+                // Right click runs one NOW regardless of the flag (the
+                // launcher's `force`, same as System > Screensaver).
+                SquareToggle {
+                    icon: "\u{F0904}"   // nf-md-power_sleep
+                    label: "Screen Saver"
+                    active: Services.Screensaver.enabled
+                    onToggled: Services.Screensaver.toggle()
+                    onRightClicked: Services.Screensaver.force()
                 }
 
             }
