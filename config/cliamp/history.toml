@@ -1,13 +1,19 @@
 [[entry]]
-played_at = "2026-10-03T08:11:01Z"
+played_at = "2026-10-05T21:01:35Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
 genre = "pop"
 
 [[entry]]
-played_at = "2026-10-03T05:47:28Z"
+played_at = "2026-10-05T20:06:15Z"
 path = "http://5229.cloudrad.io:8316/;"
 title = "Capital FM"
+
+[[entry]]
+played_at = "2026-10-05T15:30:00Z"
+path = "https://stream.revma.ihrhls.com/zc1629"
+title = "100.3 KISS FM"
+genre = "pop,top 40"
 
 [[entry]]
 played_at = "2026-10-03T04:44:30Z"
@@ -86,12 +92,6 @@ album = "JRPG Music Packs"
 played_at = "2026-10-03T04:40:16Z"
 path = "https://radio.cliamp.stream/meditative/tracks/52f3fcc73ebf024c"
 title = "Joth - Contemplation"
-
-[[entry]]
-played_at = "2026-09-24T09:14:32Z"
-path = "https://stream.revma.ihrhls.com/zc1629"
-title = "100.3 KISS FM"
-genre = "pop,top 40"
 
 [[entry]]
 played_at = "2026-09-24T09:14:26Z"
