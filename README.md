@@ -160,6 +160,21 @@ Everything else (shell, themes, fonts, terminals, hyprland) is user-agnostic.
 
 ---
 
+## Releases
+
+Milestones are tagged on GitHub:
+
+- **Tags** are semver-shaped — `v<minor>.<patch>` (`v0.5.0`, `v0.5.1`, …).
+- **Release titles** name the project with the short version — **selah v0.5**.
+- Minor bumps land per milestone batch of features, patch bumps are
+  hotfixes; `1.0` marks "considered complete".
+
+First release: [selah v0.5](https://github.com/jordan-ops/selah/releases/tag/v0.5.0)
+(bar, control center, 27-page settings, launcher, 47-widget port, lock,
+screensaver, theming). `git pull --tags` checks one out locally.
+
+---
+
 ## Updating this repo
 
 ```bash
