@@ -15,7 +15,13 @@ hl.env("HYPRCURSOR_SIZE", "20")
 -- https://wiki.archlinux.org/title/Qt
 hl.env("QT_QPA_PLATFORMTHEME", "qt5ct:qt6ct")
 
+hl.env("XDG_CURRENT_DESKTOP", "Hyprland", true)
+hl.env("XDG_SESSION_TYPE", "wayland", true)
+hl.env("XDG_SESSION_DESKTOP", "Hyprland", true)
 
+hl.on("hyprland.start", function()
+	hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
+end)
 -----------------------
 ----- PERMISSIONS -----
 -----------------------
