@@ -202,7 +202,8 @@ Singleton {
 
     if (q.startsWith(">")) {
         const s = q.slice(1).trim()
-        return SettingsCatalog.entries.filter(e => {
+        // searchable = entries without the section headings (page chrome)
+        return SettingsCatalog.searchable.filter(e => {
             const hay = [e.label, e.description, e.keywords, pageMeta(e.page).name]
                 .filter(Boolean).join(" ").toLowerCase()
             return s === "" || s.split(/\s+/).every(t => hay.includes(t))
@@ -276,9 +277,34 @@ Singleton {
         selectedIndex = (selectedIndex + delta + results.length) % results.length
     }
 
+    // Terminal=true entries (cliamp, htop, ncmpcpp…): quickshell's
+    // DesktopEntry.execute() runs the Exec line as-is, so a TUI starts
+    // with no controlling tty and dies before drawing anything
+    // ("bubbletea: could not open TTY" is cliamp's way of saying it).
+    // Wrap those in foot instead — everything else keeps the built-in
+    // execute() untouched.
+    //
+    // foot -T sets the window title up front because foot's class is
+    // always just "foot": the only handle a window rule has on this is
+    // the title (same reason rules.lua matches "Uninstall.*" by title).
+    function launch(e) {
+        if (e == null) return
+        const inTerminal = e.runInTerminal === true
+            && e.command && e.command.length > 0
+        if (!inTerminal) {
+            e.execute()
+            return
+        }
+        const argv = ["foot", "-T", (e.name && e.name !== "") ? e.name : "foot"]
+        if (e.workingDirectory)
+            argv.push("--working-directory=" + e.workingDirectory)
+        argv.push("-e")
+        Quickshell.execDetached(argv.concat(e.command))
+    }
+
     function launchSelected() {
         if (results.length === 0) return
-        results[Math.min(selectedIndex, results.length - 1)].execute()
+        launch(results[Math.min(selectedIndex, results.length - 1)])
         closeLauncher()
     }
 

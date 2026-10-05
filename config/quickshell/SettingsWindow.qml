@@ -151,7 +151,9 @@ FocusScope {
             if (pages[i].name.toLowerCase().includes(q))
                 out.push({ kind: "page", title: pages[i].name,
                            caption: "Page", page: pages[i].id, fid: "" })
-        const all = Services.SettingsCatalog.entries
+        // searchable = entries minus section headings, so a page's own
+        // group labels never show up as hits
+        const all = Services.SettingsCatalog.searchable
         for (let i = 0; i < all.length && out.length < 14; i++) {
             const e = all[i]
             if (!e.label) continue
