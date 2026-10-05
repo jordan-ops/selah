@@ -130,5 +130,26 @@ Variants {
                     Services.Ripple.spawnDrag(bgWindow.modelData.name, mouse.x, mouse.y)
             }
         }
+
+        // ——— desktop clock widget (Settings ▸ Appearance ▸ Desktop clock) ———
+        // Declared AFTER the ripple so the widget gets the clicks inside
+        // its own box (the ripple would otherwise fire under it), and this
+        // click-away layer between the two: it only exists while the
+        // widget is in edit mode, covering the whole desktop so a click
+        // anywhere else closes edit mode and saves the geometry. Off by
+        // default — active: false means no component at all, not a hidden
+        // one.
+        MouseArea {
+            anchors.fill: parent
+            enabled: clockLoader.item ? clockLoader.item.editMode : false
+            onClicked: clockLoader.item.endEdit()
+        }
+
+        Loader {
+            id: clockLoader
+            anchors.fill: parent
+            active: Services.Settings.clockEnabled
+            source: "clock/DesktopClock.qml"
+        }
     }
 }
