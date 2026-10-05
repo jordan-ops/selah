@@ -17,10 +17,13 @@ local closeWindowBind = hl.bind(mainMod .. " + W", hl.dsp.window.close())
 -- closeWindowBind:set_enabled(false)
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
--- Float toggle + center: window rules only apply at map time, so the
--- center-floats rule can't catch a window floated mid-session.
+-- Float toggle + default float size + center: window rules only apply at
+-- map time, so the default-float-size and center-floats rules can't catch
+-- a window floated mid-session. The resize only acts on floating windows,
+-- so it is a no-op when the same key untile-fies the window again.
 hl.bind(mainMod .. " + V", hl.dsp.exec_cmd(
     "hyprctl dispatch 'hl.dsp.window.float({ action = \"toggle\" })'; "
+    .. "hyprctl dispatch 'hl.dsp.window.resize({ x = 1234, y = 721 })'; "
     .. "hyprctl dispatch 'hl.dsp.window.center()'"))
 
 -- Aspect-fit fullscreen: scales the window to fit the monitor keeping
