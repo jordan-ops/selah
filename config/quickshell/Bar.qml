@@ -256,9 +256,22 @@ Variants {
             // is the one that must let the wallpaper through
             color: Services.Colors.panel
 
+            // ——— one transient slot for every flash the pill shows ———
+            // volume/brightness, the track that just changed and the
+            // charger state all share it. osdPriority is the pecking
+            // order (0 level · 1 track · 2 charge) so scrubbing volume
+            // can't stomp an alert the user still needs to read — the
+            // same rule NibrasShell's CapsuleManager uses.
             property bool osdVisible: false
-            property string osdType: "volume"
+            property string osdType: "volume"   // volume | brightness | track | charge
             property real osdValue: 0
+            property int osdPriority: 0
+
+            // charger flap state — see chargeFlip()/chargeAnnounce() below
+            property var chargeStamps: []
+            property bool chargeState: false
+            property real chargeLastAt: 0
+            property real chimeLastAt: 0
 
             // compact rest capsule: expands on hover (or click) into the
             // full segmented row. Collapse waits for the grace timer, so a
@@ -505,7 +518,12 @@ Variants {
                 wallpaper:    () => Qt.size(Services.Themes.geom.pillW, 24 + pill.wallpaperStripHeight()),
                 controlcenter:() => Qt.size(760, 440),
                 clock:        () => Qt.size(620, 520),
-                osd:          () => Qt.size(220, 35),
+                // the transient slot is shared by four flashes — a level
+                // glance and a plug event keep the compact bar, a track
+                // swap grows the pill for art + two lines
+                osd:          () => pill.osdType === "track"
+                                    ? Qt.size(430, 56)
+                                    : Qt.size(220, 35),
                 notif:        () => Qt.size(420, Math.max(35, notificationContent.implicitHeight + 22)),
                 power:        () => Qt.size(pill.powerRowWidth(), 24 + 64),
                 clipboard:    () => Qt.size(430, 12 + 30 + 8 + clipboardContent.listH + 12),
@@ -532,10 +550,21 @@ Variants {
                 SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping }
             }
 
-            function showOsd(type, value) {
+            // Priority gate first, then arm the hold. A LOWER-priority
+            // event never takes the slot from a higher one still on
+            // screen; equal or higher always may, so scrubbing volume
+            // keeps answering every step while the level is what the
+            // user is doing. Hold length follows what has to be read:
+            // a level glance vs a track vs a plug event.
+            function showOsd(type, value, priority) {
+                const p = priority || 0
+                if (pill.osdVisible && p < pill.osdPriority) return
                 pill.osdType = type
                 pill.osdValue = value
+                pill.osdPriority = p
                 pill.osdVisible = true
+                osdTimer.interval = type === "track" ? 4000
+                    : type === "charge" ? 3200 : 1800
                 osdTimer.restart()
             }
 
@@ -543,6 +572,60 @@ Variants {
                 id: osdTimer
                 interval: 1800
                 onTriggered: pill.osdVisible = false
+            }
+
+            // ——— charger state, with flap handling ———
+            // This machine's jack reconnects at random (loose cable, worn
+            // connector), so a naive onChargingChanged → flash would
+            // strobe the pill and chime every few seconds. Three gates,
+            // cheapest first:
+            //   1. settle   — every flip RESTARTS a 3 s timer, so a blip
+            //                shorter than that never reaches the pill at
+            //                all (this is what catches the real flapping);
+            //   2. unstable — ≥6 flips inside 60 s means the supply is
+            //                bouncing, not changing: stay quiet and leave
+            //                the stamps to age out;
+            //   3. cooldown — the same state is never announced twice
+            //                inside 90 s, and no chime inside 5 min.
+            function chargeFlip() {
+                const now = Date.now()
+                const kept = pill.chargeStamps.filter(t => now - t < 60000)
+                kept.push(now)
+                pill.chargeStamps = kept
+                chargeSettle.restart()
+            }
+
+            function chargeAnnounce() {
+                const now = Date.now()
+                const flips = pill.chargeStamps.filter(t => now - t < 60000).length
+                if (flips >= 6) return
+                const s = Services.Battery.charging
+                if (s === pill.chargeState && now - pill.chargeLastAt < 90000) return
+                pill.chargeState = s
+                pill.chargeLastAt = now
+                pill.chargeStamps = []
+                pill.showOsd("charge", Services.Battery.percent, 2)
+                if (s && now - pill.chimeLastAt > 300000) {
+                    pill.chimeLastAt = now
+                    pill.chime("power-plug")
+                }
+            }
+
+            Timer {
+                id: chargeSettle
+                interval: 3000
+                onTriggered: pill.chargeAnnounce()
+            }
+
+            // Alert tone for the top-priority event — freedesktop's own
+            // event sound (no asset shipped in the repo), one per plug
+            // direction, silenced by the effects.tone switch.
+            Process { id: chimeProc }
+
+            function chime(name) {
+                if (!Services.Settings.effectsTone) return
+                chimeProc.command = ["canberra-gtk-play", "-i", name]
+                chimeProc.running = true
             }
 
             // same shape as showOsd()/osdTimer above — morph in, hold, morph
@@ -571,7 +654,43 @@ Variants {
 
             Connections {
                 target: Services.Brightness
-                function onLevelChanged() { pill.showOsd("brightness", Services.Brightness.level) }
+                // seeded guards the start-up read: level starts at 1.0
+                // in the service, so the first real value would otherwise
+                // announce itself as if the user had pressed a key
+                function onLevelChanged() {
+                    if (!Services.Brightness.seeded) return
+                    pill.showOsd("brightness", Services.Brightness.level)
+                }
+            }
+
+            // charger — ALWAYS through chargeFlip(), never straight to
+            // showOsd: the flap gates above are the whole point
+            Connections {
+                target: Services.Battery
+                function onChargingChanged() { pill.chargeFlip() }
+            }
+
+            // track change — `title` is the discriminator: position
+            // heartbeats and metadata refreshes never touch it. Empty
+            // title = player went away → reset the guard so the same
+            // track playing again counts as new.
+            Connections {
+                id: mediaWatch
+                target: Services.Media
+                property string lastTrack: ""
+
+                function onTitleChanged() {
+                    const t = Services.Media.title
+                    if (t === "") { mediaWatch.lastTrack = ""; return }
+                    if (t === mediaWatch.lastTrack) return
+                    mediaWatch.lastTrack = t
+                    // the media card is already open — it IS the feedback
+                    if (Services.Media.open || !Services.Media.hasPlayer) return
+                    pill.showOsd("track", 0, 1)
+                }
+                function onHasPlayerChanged() {
+                    if (!Services.Media.hasPlayer) mediaWatch.lastTrack = ""
+                }
             }
 
             Connections {
@@ -1024,7 +1143,8 @@ Variants {
                 id: osdContent
                 anchors.centerIn: parent
                 spacing: 10
-                opacity: pill.mode === "osd" ? 1 : 0
+                opacity: pill.mode === "osd"
+                    && (pill.osdType === "volume" || pill.osdType === "brightness") ? 1 : 0
                 visible: (pill.mode === "osd") || opacity > 0.01
                 Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
 
@@ -1058,6 +1178,127 @@ Variants {
                             SpringAnimation { spring: Services.Motion.bounceSpring; damping: Services.Motion.bounceDamping }
                         }
                     }
+                }
+            }
+
+            // charger flash — shares the osd slot with the level glance
+            // (same compact 220×35 bar), state word beside the percentage
+            // so it reads at a glance without counting icon segments
+            Row {
+                id: chargeContent
+                anchors.centerIn: parent
+                spacing: 8
+                opacity: pill.mode === "osd" && pill.osdType === "charge" ? 1 : 0
+                visible: (pill.mode === "osd") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                Text {
+                    font.family: Services.Fonts.family
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: 16
+                    color: Services.Battery.charging ? Services.Colors.accent
+                                                     : Services.Colors.textMuted
+                    text: Services.Battery.charging ? "󰂄" : "󰁹"
+                }
+
+                Text {
+                    font.family: Services.Fonts.family
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: Services.Colors.text
+                    text: pill.osdValue + "%"
+                }
+
+                Text {
+                    font.family: Services.Fonts.family
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: 12
+                    color: Services.Colors.textMuted
+                    text: Services.Battery.charging ? "Charging" : "On battery"
+                }
+            }
+
+            // track swap — art + two lines, the capsule's tallest flash.
+            // Clicking it opens the media card (same surface, no new
+            // window), which also pre-empts the flash: mode "media" wins
+            // the chain over "osd".
+            Item {
+                id: trackContent
+                anchors.centerIn: parent
+                width: trackRow.width
+                height: trackRow.height
+                opacity: pill.mode === "osd" && pill.osdType === "track" ? 1 : 0
+                visible: (pill.mode === "osd") || opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+                // Wrapper, not a bare Row: a Row refuses fill/centerIn anchors
+                // on its children (it would stop laying out), so the click
+                // layer lives on this Item and the Row only positions pixels.
+                // The Item takes its size from the Row, never the other way
+                // round — no binding loop.
+                Row {
+                    id: trackRow
+                    spacing: 10
+
+                    Rectangle {
+                        width: 40
+                        height: 40
+                        radius: 8
+                        color: Services.Colors.surfaceAlt
+                        clip: true
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Image {
+                            anchors.fill: parent
+                            source: Services.Media.artUrl
+                            visible: Services.Media.artUrl !== ""
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                        }
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            anchors.centerIn: parent
+                            visible: Services.Media.artUrl === ""
+                            text: "\uf385"
+                            font.pixelSize: 18
+                            color: Services.Colors.textMuted
+                        }
+                    }
+
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 350
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 13
+                            font.bold: true
+                            elide: Text.ElideRight
+                            color: Services.Colors.text
+                            text: Services.Media.title
+                        }
+
+                        Text {
+                            width: parent.width
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                            color: Services.Colors.textMuted
+                            text: Services.Media.artist
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Services.Media.toggle()
                 }
             }
 
@@ -1331,7 +1572,7 @@ Variants {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                modelData.execute()
+                                Services.Launcher.launch(modelData)
                                 Services.Launcher.closeLauncher()
                             }
                         }
