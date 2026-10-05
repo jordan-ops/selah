@@ -745,7 +745,7 @@ FocusScope {
                     || e.type === "timecard" || e.type === "carousel"
                     || e.type === "knobcard"
                     || e.type === "keybinds" || e.type === "xcompose"
-                    || e.type === "animcard"
+                    || e.type === "animcard" || e.type === "lockstyle"
                     || e.type === "netlist" || e.type === "btlist"
                 // right-side zone the label column must stay clear of
                 readonly property int ctlZone: {
@@ -757,6 +757,7 @@ FocusScope {
                     case "knob":      return 96
                     case "buttons":   return 346
                     case "choice":    return 250
+                    case "lockstyle": return 40
                     case "swatches":
                     case "wallpapers":
                     case "powercard":
@@ -772,11 +773,16 @@ FocusScope {
                     }
                 }
                 width: rowsList.width
-                height: 64 + (loader.item && loader.item.extraHeight
-                              ? loader.item.extraHeight : 0)
+                // a section heading is its own short row: no control on
+                // it, so nothing to size around — the 64 px every
+                // settings row needs would leave it floating
+                height: (e.type === "section" ? 34 : 64)
+                    + (loader.item && loader.item.extraHeight
+                          ? loader.item.extraHeight : 0)
                 radius: 10
-                color: hover.hovered || row.linked ? Services.Colors.surface : "transparent"
-                border.width: row.linked ? 1 : 0
+                color: e.type !== "section" && (hover.hovered || row.linked)
+                    ? Services.Colors.surface : "transparent"
+                border.width: row.linked && e.type !== "section" ? 1 : 0
                 border.color: Services.Colors.accent
 
                 // hover / deep-link highlight fades in and out instead of
@@ -810,6 +816,7 @@ FocusScope {
                     anchors.verticalCenter: row.topLabels ? undefined : parent.verticalCenter
                     width: parent.width - row.ctlZone
                     spacing: 3
+                    visible: row.e.type !== "section"
 
                     Text {
                         font.family: Services.Fonts.family
@@ -829,6 +836,23 @@ FocusScope {
                         width: parent.width
                         visible: text !== ""
                     }
+                }
+
+                // section — the heading that splits a merged page into
+                // its groups (Session lock / Login screen on Lock screen).
+                // Tracked small caps rather than a big title: it labels
+                // the rows under it, it doesn't compete with them.
+                Text {
+                    font.family: Services.Fonts.family
+                    visible: row.e.type === "section"
+                    anchors.left: parent.left
+                    anchors.leftMargin: 14
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: String(row.e.label || "").toUpperCase()
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.letterSpacing: 1.2
+                    color: Services.Colors.textMuted
                 }
 
                 // switch — accent pill + On/Off value text
@@ -1039,6 +1063,7 @@ FocusScope {
                 Component { id: compAnim;     SettingsAnimationsCard { e: row.e } }
                 Component { id: compNetList;  SettingsNetworksCard   { e: row.e } }
                 Component { id: compBtList;   SettingsBluetoothCard  { e: row.e } }
+                Component { id: compLockStyle; SettingsLockStyleRow  { e: row.e } }
 
                 Loader {
                     id: loader
@@ -1047,6 +1072,7 @@ FocusScope {
                          || row.e.type === "wallpapers" || row.e.type === "carousel"
                          || row.e.type === "buttons" || row.e.type === "cmdswitch"
                          || row.e.type === "knob" || row.e.type === "textsize"
+                         || row.e.type === "lockstyle"
                          || row.isCard
                     sourceComponent: {
                         switch (row.e.type) {
@@ -1065,6 +1091,7 @@ FocusScope {
                         case "keybinds":   return compBinds
                         case "xcompose":   return compCompose
                         case "animcard":   return compAnim
+                        case "lockstyle":  return compLockStyle
                         case "netlist":    return compNetList
                         case "btlist":     return compBtList
                         default:           return compSwatch

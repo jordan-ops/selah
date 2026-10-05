@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.Pam
 import Quickshell.Io
+import "./lock" as Lock
 import "./services" as Services
 
 // quickshell-native lock screen — replaces hyprlock entirely.
@@ -15,7 +16,13 @@ import "./services" as Services
 // (/etc/pam.d/qs-lock, one-time setup: ~/.local/bin/qs-lock-pam).
 //
 // Adapted from omarchy's shell/plugins/lock (Service.qml), trimmed to
-// password-only v1: fingerprint / idle-blank / preview deferred.
+// password-only v1: fingerprint / idle-blank deferred.
+//
+// The layout is NOT in here: lock/ holds five styles (Classic, Card,
+// Minimal, Magazine, Clock), lock.style in settings.json picks one and the
+// Loader below draws it. This file owns the session lock, PAM and the
+// auth state every style reads — see lock/Classic.qml for the shape of
+// the contract: property lock + function focusField().
 //
 // FAILSAFE: never engages the lock unless /etc/pam.d/qs-lock is known to
 // exist — locking into a state that can't authenticate would strand the
@@ -42,18 +49,43 @@ Item {
     property string failureMessage: ""
     property int failedAttempts: 0
 
-    // The lock backdrop is the live desktop wallpaper, blurred.
-    //
-    // Background.qml and this file can disagree for a moment: Wallpapers
-    // crossfades the desktop by layering `previous` over `current` with an
-    // opacity tween, but the lock has no reason to animate — it just points
-    // at whatever `current` is when the surface comes up, so a wallpaper
-    // switched mid-session shows the new one on the next lock.
-    function fileUrl(path) {
-        if (path === "") return ""
-        // encode each segment: theme dirs are user-chosen and a space in a
-        // directory name would otherwise truncate the source at that byte
-        return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
+    // ——————— which layout is on show ———————
+    // lock.style in settings.json — written by the preview row on
+    // Settings ▸ Lock screen, read live, so the next lock picks the new
+    // style up with no reload. Unknown values fall back to classic:
+    // locking into a blank surface is the one failure this must not have.
+    readonly property var styleComponent: {
+        switch (Services.Settings.lockStyle) {
+        case "card":     return compCard
+        case "minimal":  return compMinimal
+        case "magazine": return compMagazine
+        case "clock":    return compClock
+        default:         return compClassic
+        }
+    }
+
+    Component { id: compClassic;  Lock.Classic  { lock: root } }
+    Component { id: compCard;     Lock.Card     { lock: root } }
+    Component { id: compMinimal;  Lock.Minimal  { lock: root } }
+    Component { id: compMagazine; Lock.Magazine { lock: root } }
+    Component { id: compClock;    Lock.Clock    { lock: root } }
+
+    // one clock for every style — the date line and the settings preview
+    // both read it through `lock.now`
+    SystemClock { id: nowClock; precision: SystemClock.Minutes }
+    readonly property date now: nowClock.date
+
+    // Styles move the field, so its id lives inside the Loader — and
+    // because WlSessionLockSurface instantiates its children in a
+    // per-output component scope, that id is NOT visible from root scope
+    // (a bare `styleLoader` here throws ReferenceError at runtime). The
+    // Loader registers itself below; every focus request funnels through
+    // the loaded component's focusField() instead.
+    property var styleLoaderRef: null
+
+    function focusPassword() {
+        if (styleLoaderRef && styleLoaderRef.item && styleLoaderRef.item.focusField)
+            styleLoaderRef.item.focusField()
     }
 
     function logEvent(event) {
@@ -121,7 +153,7 @@ Item {
         pendingPassword = ""
         failedAttempts += 1
         failureMessage = "Authentication failed (" + failedAttempts + ")"
-        Qt.callLater(function() { passwordInput.forceActiveFocus() })
+        Qt.callLater(root.focusPassword)
     }
 
     WlSessionLock {
@@ -132,7 +164,7 @@ Item {
             root.logEvent("session-locked=" + locked)
 
             if (locked) {
-                Qt.callLater(function() { passwordInput.forceActiveFocus() })
+                Qt.callLater(root.focusPassword)
             } else if (root.lockRequested) {
                 // compositor dropped the lock under us — resync instead of
                 // leaving lockRequested stuck true
@@ -148,166 +180,24 @@ Item {
             color: Services.Colors.background
 
             onVisibleChanged: {
-                if (visible) Qt.callLater(function() { passwordInput.forceActiveFocus() })
+                if (visible) Qt.callLater(root.focusPassword)
             }
 
-            Image {
-                id: lockWallpaper
+            // The chosen style draws the backdrop AND its layout; the
+            // surface only supplies the canvas (and the fallback colour
+            // while the wallpaper decodes). Focus requests reach the
+            // field inside the component through root.focusPassword().
+            Loader {
+                id: styleLoader
                 anchors.fill: parent
-                source: root.fileUrl(Services.Wallpapers.current)
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: true
-                // cap the decode at screen size — MultiEffect samples this
-                // every frame the lock is up, so anything larger is waste
-                sourceSize.width: width
-                sourceSize.height: height
-                // REQUIRED by QtQuick.Effects: MultiEffect draws a second,
-                // separate item *alongside* its source rather than
-                // replacing it. With both visible the sharp image sits under
-                // the blur and shows through wherever the blur samples past
-                // the edge of the surface.
-                visible: false
+                sourceComponent: root.styleComponent
+                onLoaded: if (item && root.lockRequested) Qt.callLater(item.focusField)
+                // hand root a scope-safe handle (see styleLoaderRef)
+                Component.onCompleted: root.styleLoaderRef = styleLoader
+                Component.onDestruction: if (root.styleLoaderRef === styleLoader)
+                    root.styleLoaderRef = null
             }
 
-            // Blur parameters mirror omarchy's plugins/lock/LockView.qml —
-            // the screen this file was adapted from. autoPaddingEnabled MUST
-            // be false here: Qt's own guidance is that with it on, a
-            // full-screen blur "grows outside the window / screen".
-            // blurMultiplier rather than a bigger blurMax, per the same
-            // performance note (bigger blurMax costs texture lookups).
-            MultiEffect {
-                anchors.fill: parent
-                source: lockWallpaper
-                autoPaddingEnabled: false
-                // gate on Ready so the shader isn't sized against an image
-                // that hasn't decoded yet
-                blurEnabled: lockWallpaper.status === Image.Ready
-                blur: 1.0
-                blurMax: 128
-                blurMultiplier: 1.25
-                contrast: -0.08
-            }
-
-            // Scrim: the clock is 150px in Colors.text and the field label
-            // is 13px, both straight over the wallpaper. A blurred bright
-            // image would otherwise put light-on-light behind them. Themed
-            // background rather than plain black so it tints to the palette
-            // instead of greying the wallpaper out.
-            Rectangle {
-                anchors.fill: parent
-                color: Services.Colors.background
-                opacity: 0.4
-            }
-
-            // click anywhere to (re)focus the field
-            MouseArea {
-                anchors.fill: parent
-                onClicked: passwordInput.forceActiveFocus()
-            }
-
-            Column {
-                anchors.centerIn: parent
-                width: 460
-                spacing: 10
-
-                Text {
-                    font.family: Services.Fonts.family
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Services.Time.time
-                    font.pixelSize: 150
-                    font.weight: Font.Bold
-                    color: Services.Colors.text
-                }
-
-                Text {
-                    font.family: Services.Fonts.family
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Qt.formatDateTime(nowClock.date, "dddd, MMMM d")
-                    font.pixelSize: 15
-                    color: Services.Colors.textMuted
-                }
-
-                Item { width: 1; height: 44 }   // spacer
-
-                Text {
-                    font.family: Services.Fonts.family
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.userName
-                    font.pixelSize: 13
-                    color: Services.Colors.textMuted
-                }
-
-                Rectangle {
-                    id: field
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width
-                    height: 48
-                    radius: 12
-                    color: Services.Colors.surface
-                    border.width: 1
-                    border.color: root.failureMessage.length > 0 ? Services.Colors.critical
-                                : passwordInput.activeFocus ? Services.Colors.accent
-                                : Services.Colors.low
-                    Behavior on border.color { ColorAnimation { duration: Services.Motion.short3; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.standardCurve } }
-
-                    TextInput {
-                        font.family: Services.Fonts.family
-                        id: passwordInput
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: Services.Colors.text
-                        selectionColor: Services.Colors.accent
-                        selectedTextColor: Services.Colors.background
-                        font.pixelSize: 15
-                        echoMode: TextInput.Password
-                        passwordCharacter: "●"
-                        enabled: root.lockRequested && !root.authenticatingPassword
-                        focus: root.lockRequested
-
-                        onAccepted: {
-                            root.submitPassword(text)
-                            text = ""
-                        }
-                        Keys.onEscapePressed: {
-                            text = ""
-                            root.failureMessage = ""
-                        }
-                    }
-
-                    Text {
-                        font.family: Services.Fonts.family
-                        visible: passwordInput.text.length === 0 && !root.authenticatingPassword
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        anchors.leftMargin: 16
-                        text: "Password"
-                        font.pixelSize: 15
-                        color: Services.Colors.textMuted
-                    }
-                }
-
-                Text {
-                    font.family: Services.Fonts.family
-                    id: statusText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width
-                    height: 18
-                    horizontalAlignment: Text.AlignHCenter
-                    font.pixelSize: 13
-                    text: root.authenticatingPassword ? "Checking…" : root.failureMessage
-                    color: root.failureMessage.length > 0 ? Services.Colors.critical : Services.Colors.textMuted
-                    opacity: text.length > 0 ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
-                }
-            }
-
-            SystemClock {
-                id: nowClock
-                precision: SystemClock.Minutes
-            }
         }
     }
 
