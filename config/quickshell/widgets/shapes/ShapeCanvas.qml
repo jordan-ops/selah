@@ -40,14 +40,15 @@ Item {
             const pts = Geom.points(String(root.roundedPolygon))
             if (!pts || pts.length < 3) return
 
-            // unit outline (-1..1) → box, inscribed: one shared scale so
-            // circles stay circles whatever the widget's aspect
-            const sx = width / 2
-            const sy = height / 2
+            // unit outline (-1..1) → box, inscribed AND centered: the
+            // origin must move to the middle, otherwise the -x half
+            // paints outside the canvas and only its quadrant shows
+            const cx = width / 2
+            const cy = height / 2
             ctx.beginPath()
-            ctx.moveTo(pts[0][0] * sx, pts[0][1] * sy)
+            ctx.moveTo(cx + pts[0][0] * cx, cy + pts[0][1] * cy)
             for (let i = 1; i < pts.length; i++)
-                ctx.lineTo(pts[i][0] * sx, pts[i][1] * sy)
+                ctx.lineTo(cx + pts[i][0] * cx, cy + pts[i][1] * cy)
             ctx.closePath()
             ctx.fillStyle = String(root.color)
             ctx.fill()

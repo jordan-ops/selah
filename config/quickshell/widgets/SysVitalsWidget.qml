@@ -15,7 +15,7 @@ WidgetHost {
 
     readonly property var si: root.preview ? PreviewData : ServiceSystemInfo
     readonly property string display: SettingsConfig.general?.displayFont || "Titan One"
-    readonly property string mono: "JetBrains Mono"
+    readonly property string mono: SettingsConfig.general.defaultFont
     readonly property var hist: root.preview
         ? [0.3, 0.42, 0.35, 0.5, 0.62, 0.4, 0.36, 0.44, 0.7, 0.52, 0.38, 0.41, 0.33, 0.47]
         : ServiceDashData.cpuHist.slice(-14)

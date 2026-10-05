@@ -16,7 +16,7 @@ WidgetHost {
     readonly property bool showSeconds: SettingsConfig.widgets.clockSeconds ?? true
     readonly property bool musicRim: SettingsConfig.widgets.clockMusicRim ?? true
     readonly property bool _music: root.musicRim && ServiceMusic.activePlayer !== null
-    readonly property string _mono: "Fira Code"
+    readonly property string _mono: SettingsConfig.general.defaultFont
 
     readonly property real cx: root.width / 2
     readonly property real cy: root.height / 2

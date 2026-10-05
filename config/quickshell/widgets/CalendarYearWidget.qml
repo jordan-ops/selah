@@ -14,7 +14,7 @@ WidgetHost {
     defaultPos: Qt.point(760, 440)
     tile: WidgetSizes.large
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
     readonly property bool showHolidays: SettingsConfig.widgets.calendarYearHolidays ?? true
 
     readonly property var now: {

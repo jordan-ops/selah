@@ -6,7 +6,7 @@ Item {
     id: root
 
     property string text: ""
-    property string family: "Rubik"
+    property string family: SettingsConfig.general.defaultFont
     property int pixelSize: 40
     property int weight: 600
     property color color: Colors.surfaceText

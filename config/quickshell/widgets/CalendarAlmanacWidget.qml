@@ -13,7 +13,7 @@ WidgetHost {
     defaultPos: Qt.point(880, 300)
     tile: WidgetSizes.wide
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
 
     readonly property int startDay: (SettingsConfig.widgets.calendarAlmanacMonday ?? true) ? 1 : 0
     readonly property bool dimOther: SettingsConfig.widgets.calendarAlmanacDimOther ?? true

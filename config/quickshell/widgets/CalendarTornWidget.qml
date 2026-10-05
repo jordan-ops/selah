@@ -15,7 +15,7 @@ WidgetHost {
 
     backdropMask: tornMask
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
     readonly property real _tear: 10
 
     readonly property int startDay: (SettingsConfig.widgets.calendarTornMonday ?? true) ? 1 : 0

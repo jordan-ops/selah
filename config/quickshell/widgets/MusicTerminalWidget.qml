@@ -17,7 +17,7 @@ WidgetHost {
 
     readonly property bool compact: root.sh < 240
     readonly property int fs: root.compact ? 12 : 13
-    readonly property string mono: "JetBrains Mono"
+    readonly property string mono: SettingsConfig.general.defaultFont
     readonly property int barCells: 28
     readonly property int litCells: Math.round(m.progress * root.barCells)
     readonly property real volume: root.preview ? 0.72 : (ServiceMusic.activePlayer?.volume ?? 0)

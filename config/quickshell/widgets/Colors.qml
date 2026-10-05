@@ -10,10 +10,11 @@ import "../services" as Services
 // rewriting every one, this singleton ANSWERS those names from our own live
 // palette (services/Colors.qml, which already tracks every theme switch):
 // the eight md3 roles our generated colors.json carries map straight across,
-// and the rest are derived here so widgets still get a full tonal range —
-// elevation steps blend the background toward the text colour, secondary and
-// tertiary hue-rotate the accent, and every *Text/on-role is picked by WCAG
-// contrast against the role it sits on.
+// and the rest are derived HERE, inside the palette — elevation steps lift
+// the background toward the cream text (never toward white), secondary and
+// tertiary are accent/cream/background mixes (no hue rotation off-hue), and
+// every *Text/on-role is picked by WCAG contrast between our own two
+// endpoints, so no widget prints a colour the rest of the shell lacks.
 Singleton {
     id: root
 
@@ -78,18 +79,22 @@ Singleton {
         return _hex(hue2(p, q, h + 1 / 3) * 255, hue2(p, q, h) * 255, hue2(p, q, h - 1 / 3) * 255)
     }
 
-    // WCAG-ish contrast: black or white, whichever reads better on bg
+    // WCAG-ish contrast, but between OUR two palette endpoints instead of
+    // pure black/white — dark cards get the cream text, light/cream
+    // surfaces get the dark green, so no widget ever prints #fff/#000
     function on(bg) {
         const r = _rgb(bg)
-        if (!r) return "#ffffff"
+        if (!r) return String(_text)
         const lin = v => {
             v /= 255
             return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
         }
-        const lum = 0.2126 * lin(r[0]) + 0.7152 * lin(r[1]) + 0.0722 * lin(r[2])
-        const cBlack = (lum + 0.05) / 0.05
-        const cWhite = 1.05 / (lum + 0.05)
-        return cBlack >= cWhite ? "#000000" : "#ffffff"
+        const lumOf = c => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+        const lum = lumOf(r)
+        const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+        const cream = lumOf(_rgb(_text))
+        const dark = lumOf(_rgb(_bg))
+        return ratio(cream, lum) >= ratio(dark, lum) ? String(_text) : String(_bg)
     }
 
     // ── our live palette ──────────────────────────────────────────────
@@ -106,33 +111,38 @@ Singleton {
     readonly property string primary:   String(_accent)
     readonly property string primaryText: on(String(_accent))
 
-    readonly property string surface:  mix(String(_bg), "#ffffff", 0.05)
+    readonly property string surface:  mix(String(_bg), String(_text), 0.05)
     readonly property string surfaceText: String(_text)
     readonly property string surfaceVariant: String(_variant)
     readonly property string surfaceVariantText: String(_variantOn)
 
-    // elevation: the standard M3 container ramp, approximated by stepping
-    // the background toward the foreground colour
+    // elevation: every step lifts the background toward our cream text,
+    // never toward pure white — the ramp keeps the palette's warm green
+    // cast instead of drifting to neutral grey
     readonly property string surfaceContainerLowest: mix(String(_bg), "#000000", 0.10)
-    readonly property string surfaceContainerLow:     mix(String(_bg), "#ffffff", 0.03)
-    readonly property string surfaceContainer:        mix(String(_bg), "#ffffff", 0.06)
-    readonly property string surfaceContainerHigh:    mix(String(_bg), "#ffffff", 0.10)
-    readonly property string surfaceContainerHighest: mix(String(_bg), "#ffffff", 0.15)
+    readonly property string surfaceContainerLow:     mix(String(_bg), String(_text), 0.03)
+    readonly property string surfaceContainer:        mix(String(_bg), String(_text), 0.06)
+    readonly property string surfaceContainerHigh:    mix(String(_bg), String(_text), 0.10)
+    readonly property string surfaceContainerHighest: mix(String(_bg), String(_text), 0.15)
     readonly property string surfaceDim:    mix(String(_bg), "#000000", 0.15)
-    readonly property string surfaceBright: mix(String(_bg), "#ffffff", 0.12)
+    readonly property string surfaceBright: mix(String(_bg), String(_text), 0.12)
 
     readonly property string outline:        String(_outline)
     readonly property string outlineVariant: mix(String(_outline), String(_bg), 0.55)
 
-    readonly property string secondary:          hueShift(String(_accent), 30)
-    readonly property string secondaryText:      on(hueShift(String(_accent), 30))
-    readonly property string secondaryContainer: mix(hueShift(String(_accent), 30), String(_bg), 0.72)
-    readonly property string secondaryContainerText: on(mix(hueShift(String(_accent), 30), String(_bg), 0.72))
+    // secondary / tertiary stay INSIDE the palette instead of hue-rotating
+    // the accent (a +30° shift landed on cyan against a green-cream shell):
+    // secondary = cream leaning into the sage accent (the chart's warm
+    // track), tertiary = accent sunk toward the background (its deep track)
+    readonly property string secondary:          mix(String(_text), String(_accent), 0.45)
+    readonly property string secondaryText:      on(mix(String(_text), String(_accent), 0.45))
+    readonly property string secondaryContainer: mix(mix(String(_text), String(_accent), 0.45), String(_bg), 0.72)
+    readonly property string secondaryContainerText: on(mix(mix(String(_text), String(_accent), 0.45), String(_bg), 0.72))
 
-    readonly property string tertiary:          hueShift(String(_accent), -35)
-    readonly property string tertiaryText:      on(hueShift(String(_accent), -35))
-    readonly property string tertiaryContainer: mix(hueShift(String(_accent), -35), String(_bg), 0.72)
-    readonly property string tertiaryContainerText: on(mix(hueShift(String(_accent), -35), String(_bg), 0.72))
+    readonly property string tertiary:          mix(String(_accent), String(_bg), 0.45)
+    readonly property string tertiaryText:      on(mix(String(_accent), String(_bg), 0.45))
+    readonly property string tertiaryContainer: mix(mix(String(_accent), String(_bg), 0.45), String(_bg), 0.72)
+    readonly property string tertiaryContainerText: on(mix(mix(String(_accent), String(_bg), 0.45), String(_bg), 0.72))
 
     readonly property string primaryContainer: mix(String(_accent), String(_bg), 0.74)
     readonly property string primaryContainerText: on(mix(String(_accent), String(_bg), 0.74))

@@ -12,7 +12,7 @@ WidgetHost {
     backdrop: false
 
     readonly property bool tilt: SettingsConfig.widgets.clockTilt ?? true
-    readonly property string _hand: "Just Another Hand"
+    readonly property string _hand: SettingsConfig.general.displayFont
 
     ClockParts { id: t }
 

@@ -14,7 +14,7 @@ WidgetHost {
     defaultPos: Qt.point(760, 100)
     tile: WidgetSizes.wide
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
     readonly property int startDay: (SettingsConfig.widgets.calendarMoonMonday ?? true) ? 1 : 0
 
     readonly property var now: {

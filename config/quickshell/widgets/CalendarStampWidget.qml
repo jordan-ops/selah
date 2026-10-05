@@ -14,7 +14,7 @@ WidgetHost {
     defaultPos: Qt.point(1100, 440)
     tile: WidgetSizes.tall
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
     readonly property bool showPostmark: SettingsConfig.widgets.calendarStampPostmark ?? true
 
     readonly property var now: {

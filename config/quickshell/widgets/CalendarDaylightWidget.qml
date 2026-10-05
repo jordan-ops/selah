@@ -14,7 +14,7 @@ WidgetHost {
     defaultPos: Qt.point(420, 100)
     tile: WidgetSizes.strip
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
     readonly property bool showPlace: SettingsConfig.widgets.calendarDaylightPlace ?? true
 
     readonly property var astro: root.preview && !ServiceWeather.astronomy

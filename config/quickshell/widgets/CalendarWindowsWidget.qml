@@ -13,7 +13,7 @@ WidgetHost {
     defaultPos: Qt.point(420, 440)
     tile: WidgetSizes.large
 
-    readonly property string _serif: "Noto Serif Display"
+    readonly property string _serif: SettingsConfig.general.displayFont
 
     readonly property int startDay: (SettingsConfig.widgets.calendarWindowsMonday ?? true) ? 1 : 0
     readonly property bool showFooter: SettingsConfig.widgets.calendarWindowsFooter ?? true

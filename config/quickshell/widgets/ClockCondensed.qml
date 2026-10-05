@@ -12,7 +12,7 @@ WidgetHost {
     backdrop: false
 
     readonly property bool showLabel: SettingsConfig.widgets.clockLabel ?? true
-    readonly property string _display: "Fira Sans Condensed"
+    readonly property string _display: SettingsConfig.general.displayFont
 
     ClockParts { id: t }
 
