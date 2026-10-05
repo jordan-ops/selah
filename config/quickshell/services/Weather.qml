@@ -17,6 +17,15 @@ Singleton {
     readonly property bool ok: temp !== ""
     readonly property string tempLabel: temp !== "" ? temp + "°" : ""
 
+    // full wttr.in j1 payload — the ported widgets need forecast days,
+    // hourly slots and astronomy (sunrise/moonrise/moon phase); the chip
+    // only ever read temp + desc, so this stayed empty until the widget
+    // port. Same fetch, same cache, same 30-min timer as the chip.
+    property var raw: null
+    property bool hasError: false
+    property var lastUpdated: null
+    readonly property bool fetching: fetch.running
+
     // condition → emoji, checked specific-first so "partly cloudy"
     // doesn't fall through to the plain-cloud branch. `kind` is the
     // shared classifier: the glyph maps from it and the clock card's
@@ -46,6 +55,7 @@ Singleton {
                 if (d && d.t) {
                     root.temp = d.t
                     root.desc = d.d || ""
+                    if (d.j) root.raw = d.j   // v2 cache; old {t,d} caches still warm the chip
                 }
             } catch (e) {
                 console.log("Weather: cache parse —", e)
@@ -57,7 +67,7 @@ Singleton {
 
     function persist() {
         wr.command = ["sh", "-c", "printf %s \"$1\" > \"$2\"", "wwrite",
-                      JSON.stringify({ t: root.temp, d: root.desc }), root.cachePath]
+                      JSON.stringify({ t: root.temp, d: root.desc, j: root.raw }), root.cachePath]
         wr.running = false
         wr.running = true
     }
@@ -67,7 +77,10 @@ Singleton {
         command: ["curl", "-sf", "-m", "8", "https://wttr.in/?format=j1"]
         stdout: StdioCollector {
             onStreamFinished: {
-                if (text.trim() === "") return   // curl failed — keep last reading
+                if (text.trim() === "") {      // curl failed — keep last reading
+                    root.hasError = true
+                    return
+                }
                 try {
                     const j = JSON.parse(text)
                     const cc = j.current_condition && j.current_condition[0]
@@ -75,8 +88,12 @@ Singleton {
                     root.temp = cc.temp_C
                     const vd = cc.weatherDesc && cc.weatherDesc[0]
                     root.desc = vd ? vd.value : ""
+                    root.raw = j
+                    root.hasError = false
+                    root.lastUpdated = new Date()
                     root.persist()
                 } catch (e) {
+                    root.hasError = true
                     console.log("Weather: parse —", e)
                 }
             }

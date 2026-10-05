@@ -1,6 +1,8 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import "widgets"
+import "services" as Services
 
 ShellRoot{
     id: root
@@ -28,6 +30,23 @@ ShellRoot{
     }
 
     Background{}
+    // Nebula widget layer — Settings ▸ Widgets, or `qs ipc call widgets edit`
+    // for arrange mode. active = the master switch (SettingsConfig.widgets
+    // blob, fed by the flat widgets.* store keys the settings app writes);
+    // visible drops the surface during GameMode, the same quiet-gate the
+    // bar's decorations use. Tearing the Loader down also kills the layer
+    // surface, the IPC handler and every widget timer, so "off" costs zero.
+    Loader {
+        active: SettingsConfig.widgets.showWidgets ?? true
+        onActiveChanged: if (!active) {
+            GlobalStates.widgetEditMode = false
+            GlobalStates.widgetTextFocus = false
+            GlobalStates.desktopCursorActive = false
+        }
+        sourceComponent: WidgetScreen {
+            visible: !Services.GameMode.enabled
+        }
+    }
     Bar{ barVisible: root.barVisible; onUnhideRequested: root.barVisible = true }
     TuckTabs{}         // stash strip on the screen edge — qs ipc call tuck tuck (SUPER+T)
     LockScreen{}
