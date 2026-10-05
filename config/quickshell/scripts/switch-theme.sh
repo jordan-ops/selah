@@ -118,6 +118,17 @@ if command -v hyprctl > /dev/null 2>&1; then
     timeout -k 1 5 hyprctl reload > /dev/null 2>&1 || true &
 fi
 
+# cliamp (retro terminal player) keeps its palette in config.toml rather
+# than a shared theme file, so push the shell theme in BY NAME — cliamp
+# ships 16 of ours (tokyo-night, miasma, gruvbox, nord…). `cliamp theme
+# <name>` writes the file and pokes a running instance over its socket, so
+# an open TUI recolors without restarting. A theme cliamp has never heard
+# of is left alone instead of failing the switch.
+if command -v cliamp >/dev/null 2>&1 \
+    && cliamp theme list 2>/dev/null | tr -d ' ' | grep -qx "$THEME"; then
+    timeout -k 1 3 cliamp theme "$THEME" >/dev/null 2>&1 || true
+fi
+
 # global theming — omarchy-style: gsettings/GTK, foot (ini + live OSC),
 # kitty, chromium policy. Everything user-session runs inline; the /etc
 # policy push degrades gracefully until one-time-root-setup.sh has run.

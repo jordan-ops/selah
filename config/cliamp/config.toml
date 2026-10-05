@@ -1,4 +1,5 @@
-theme = ""
+theme = "osaka-jade"
 
+visualizer = "ClassicPeak"
 [radio]
 country = "UG"
