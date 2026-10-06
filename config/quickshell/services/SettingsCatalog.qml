@@ -273,16 +273,6 @@ Singleton {
                      { value: 45, label: "45%" } ],
           keywords: "transparency transparent alpha panel pill bar control center settings glass see through" },
 
-        { id: "apScreensaver", page: "appearance", type: "info", value: "—",
-          label: "Screensaver",
-          description: "Text/Image/Reset branding · needs omasettings menu run style.screensaver.*",
-          keywords: "screensaver branding text image idle style" },
-
-        { id: "apAboutScreen", page: "appearance", type: "info", value: "—",
-          label: "About screen",
-          description: "Text/Image/Reset branding · needs omasettings menu run style.about.*",
-          keywords: "about screen branding text image style" },
-
         // ————————————————— Desktop clock (giant time widget) ————————————————
         // Off until turned on. The widget is drag/resize-able on the
         // desktop (double-click it) and the same geometry is what the
