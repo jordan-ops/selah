@@ -39,6 +39,23 @@ PanelWindow{
         function edit(): void { GlobalStates.widgetEditMode = true }
         function close(): void { GlobalStates.widgetEditMode = false }
         function toggle(): void { GlobalStates.widgetEditMode = !GlobalStates.widgetEditMode }
+        // Open the cell quick-add at the first free grid cell — same free-cell
+        // probe the empty-cell click uses, so the picker lands where a click
+        // would have. Handy for scripting and QA without pointer injection.
+        function quickadd(): void {
+            GlobalStates.widgetEditMode = true
+            const S = WidgetSizes
+            for (let r = 0; r < S.gridRows; r++) {
+                for (let c = 0; c < S.gridCols; c++) {
+                    if (WidgetLayout.isFree(null, S.originX + c * S.pitch,
+                                            S.originY + r * S.pitch, S.cell, S.cell)) {
+                        GlobalStates.widgetQuickAdd = Qt.point(c, r * 2)
+                        return
+                    }
+                }
+            }
+            GlobalStates.widgetQuickAdd = Qt.point(-1, -1)
+        }
     }
 
     HoverHandler {
