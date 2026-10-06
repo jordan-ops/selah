@@ -88,9 +88,14 @@ Singleton {
             if (!e.persistKey || !e.hyprKey) continue
             const v = Settings.get(e.persistKey, null)
             if (v === null || v === undefined) continue
-            const b = v === true || v === "true"
-            script += SettingsCatalog.hyprEval(e.hyprKey,
-                SettingsCatalog.hyprLuaValue(b)) + "\n"
+            // bool flips store true/false, numeric rows (scroll speed)
+            // store their number — coerce only the string forms json
+            // may hand back, pass everything else through as-is
+            const val = v === "true" ? true : v === "false" ? false : v
+            const keys = e.hyprKeys || [e.hyprKey]
+            for (let k = 0; k < keys.length; k++)
+                script += SettingsCatalog.hyprEval(keys[k],
+                    SettingsCatalog.hyprLuaValue(val)) + "\n"
         }
         return script
     }

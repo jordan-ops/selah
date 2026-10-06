@@ -17,7 +17,11 @@ import QtQuick
 //                        hypr binds use — one transport, no second path)
 //          info      -> read-only value; source may be dynamic
 //          slider    -> hyprKey + min/max/step[/scale/suffix]; live read
-//                        via hyprctl getoption, commit via hyprEval
+//                        via hyprctl getoption, commit via hyprEval.
+//                        hyprKeys[] commits the same value to several
+//                        options at once (scroll speed covers mouse AND
+//                        touchpad); persistKey records it in settings.json
+//                        for SettingsApp's start-of-session reapply
 //          knob      -> readCommand + writeCommand percent row on a
 //                        rotary dial (volumes): first /(\d+)%/ of the
 //                        read stdout, writes coalesce through a 75 ms
@@ -38,7 +42,9 @@ import QtQuick
 //          dropdown  -> expanding searchable list; source "fonts"
 //                        (fc-list scan + set-font.sh), "hypr" (options[],
 //                        hyprctl read/eval), "apps" (role — default-apps.sh
-//                        claims scan, applied through xdg-mime)
+//                        claims scan, applied through xdg-mime), "sinks" /
+//                        "sources" (pactl -f json list + get-default-*, a
+//                        pick runs set-default and @DEFAULT_*@ follows)
 //          swatches  -> inline grid; source "themes" | "wallpapers",
 //                        applies via Themes.apply / Wallpapers.apply
 //          wallpapers-> swatches alias for wallpaper grids
@@ -398,39 +404,15 @@ Singleton {
           label: "Disable while typing",
           description: "Touchpad sleeps while keys are pressed · survives restarts",
           keywords: "touchpad disable while typing palm toggle" },
-        { id: "ptrScrollFactor", page: "pointer", type: "info", value: "1.00",
+        { id: "ptrScrollFactor", page: "pointer", type: "slider",
+          hyprKey: "input:scroll_factor",
+          hyprKeys: ["input:scroll_factor", "input:touchpad:scroll_factor"],
+          persistKey: "hypr.scrollFactor",
+          min: 0.1, max: 3, step: 0.1,
           label: "Scroll speed",
-          description: "0.1–3 · needs factor row (hl.config touchpad scroll_factor)",
-          keywords: "touchpad scroll speed factor number" },
+          description: "Wheel and two-finger steps land faster or slower · survives restarts",
+          keywords: "scroll speed factor wheel touchpad mouse scrolling fast slow" },
 
-        { id: "ptrDevSensitivity", page: "pointer", type: "info", value: "—",
-          label: "Sensitivity (per device)",
-          description: "Own sensitivity for one mouse/touchpad · needs hl.device (dynamic row)",
-          keywords: "pointer device sensitivity per hl.device mouse" },
-        { id: "ptrDevAccel", page: "pointer", type: "info", value: "—",
-          label: "Acceleration (per device)",
-          description: "Own accel_profile for one device · needs hl.device (dynamic row)",
-          keywords: "pointer device accel profile per hl.device" },
-        { id: "ptrDevNatural", page: "pointer", type: "info", value: "—",
-          label: "Natural scrolling (per device)",
-          description: "Own natural_scroll for one device · needs hl.device (dynamic row)",
-          keywords: "pointer device natural scroll per hl.device" },
-        { id: "ptrDevLeftHanded", page: "pointer", type: "info", value: "—",
-          label: "Left handed (per device)",
-          description: "Device-only left_handed option · needs hl.device (dynamic row)",
-          keywords: "pointer device left handed mouse buttons hl.device" },
-        { id: "ptrDevScroll", page: "pointer", type: "info", value: "—",
-          label: "Scroll speed (per device)",
-          description: "Own scroll_factor for one device · needs hl.device (dynamic row)",
-          keywords: "pointer device scroll factor per hl.device" },
-        { id: "ptrDevRemove", page: "pointer", type: "info", value: "—",
-          label: "Remove device override",
-          description: "Clears or comments out the device block · needs omasettings devices remove",
-          keywords: "pointer device remove override reset hl.device" },
-        { id: "ptrPickDevice", page: "pointer", type: "info", value: "—",
-          label: "Settings for one device",
-          description: "Pick a mouse or touchpad to open its group · needs device list (dynamic row)",
-          keywords: "pointer pick device choose one mouse touchpad" },
 
         // ————————————————— Displays (omasettings §12) —————————————————
         { id: "dspConnector", page: "displays", type: "info", value: "eDP-1",
@@ -464,14 +446,6 @@ Singleton {
           label: "Scale (eDP-1)",
           description: "Steps persist into monitors.lua and apply live",
           keywords: "display scale eDP laptop hidpi factor" },
-        { id: "dspForget", page: "displays", type: "info", value: "—",
-          label: "Forget display",
-          description: "Drops stored overrides and the monitors.lua block · needs omasettings monitor-forget",
-          keywords: "display forget remove override reset monitor" },
-        { id: "dspAdd", page: "displays", type: "info", value: "—",
-          label: "Set up a display that is not connected",
-          description: "Model or connector box + Add · needs omasettings monitor-remember",
-          keywords: "display add remember disconnected model connector dp hdmi" },
 
         // ————————————————— Audio (omasettings §13, live) —————————————————
         { id: "audOutVolume", page: "audio", type: "knob",
@@ -488,9 +462,10 @@ Singleton {
           label: "Output muted",
           description: "Mute or unmute everything you hear — pill shows live state",
           keywords: "audio mute output sound silence pactl toggle" },
-        { id: "audOutDevices", page: "audio", type: "info", value: "—",
+        { id: "audOutDevices", page: "audio", type: "dropdown",
+          source: "sinks",
           label: "Output devices",
-          description: "Pickable list of sinks, pick sets default · needs pactl list sinks (dynamic row)",
+          description: "Every sink PipeWire exposes — a pick makes it the default (pactl)",
           keywords: "audio output device sink default headphones hdmi speakers" },
         { id: "audInVolume", page: "audio", type: "knob",
           readCommand: ["pactl", "get-source-volume", "@DEFAULT_SOURCE@"],
@@ -506,9 +481,10 @@ Singleton {
           label: "Input muted",
           description: "Mute or unmute the microphone — pill shows live state",
           keywords: "audio mute input microphone silence pactl toggle" },
-        { id: "audInDevices", page: "audio", type: "info", value: "—",
+        { id: "audInDevices", page: "audio", type: "dropdown",
+          source: "sources",
           label: "Input devices",
-          description: "Pickable list of sources, pick sets default · needs pactl list sources (dynamic row)",
+          description: "Every source PipeWire exposes — a pick makes it the default (pactl)",
           keywords: "audio input device source default microphone headset" },
 
         // ————————————————— Network (omasettings §14, live) —————————————————
@@ -529,10 +505,11 @@ Singleton {
           description: "Live scan list — signal, lock, connect / disconnect / forget, password prompt inline",
           keywords: "wifi network list scan ssid connect password forget secured signal nearby" },
         { id: "netQr", page: "network", type: "action",
-          command: ["omasettings", "menu", "run", "setup.network.qr"],
+          command: ["foot", "-e", "bash", "-c",
+            Quickshell.shellDir + "/scripts/wifi-qr.sh; echo; read -p 'Press Enter to close' "],
           verb: "Show…",
           label: "Wi-Fi QR code",
-          description: "Show a code others can scan to join · needs omasettings menu",
+          description: "Scan to join — the active network as a terminal code · shows the password on screen",
           keywords: "wifi qr code share join network scan" },
 
         // ————————————————— Bluetooth (omasettings §15, live) —————————————————
@@ -598,14 +575,38 @@ Singleton {
           description: "Lock immediately — the same call Super+L makes",
           keywords: "lock now session away secure password super+l immediately" },
 
-        { id: "lkScreensaver", page: "lock", type: "info", value: "150 s",
+        { id: "lkScreensaver", page: "lock", type: "buttons",
+          readCommand: [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "screensaver"],
+          options: [
+            { label: "1 min", value: 60,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "screensaver", "60"] },
+            { label: "2½ min", value: 150,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "screensaver", "150"] },
+            { label: "5 min", value: 300,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "screensaver", "300"] },
+            { label: "10 min", value: 600,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "screensaver", "600"] },
+            { label: "15 min", value: 900,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "screensaver", "900"] } ],
           label: "Screensaver after",
-          description: "1–60 min slider, stored as seconds · needs minutes row + jq in shell.json",
+          description: "Idle time before the ASCII saver starts · writes shell.json, applies live",
           keywords: "idle screensaver timeout dim seconds minutes shell.json" },
-        { id: "lkLockAfter", page: "lock", type: "info", value: "300 s",
+        { id: "lkLockAfter", page: "lock", type: "buttons",
+          readCommand: [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "lock"],
+          options: [
+            { label: "1 min", value: 60,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "lock", "60"] },
+            { label: "2 min", value: 120,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "lock", "120"] },
+            { label: "5 min", value: 300,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "lock", "300"] },
+            { label: "10 min", value: 600,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "lock", "600"] },
+            { label: "15 min", value: 900,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "lock", "900"] } ],
           label: "Lock after",
-          description: "Fallback 300 s · needs minutes row + jq in shell.json",
-          keywords: "idle lock timeout seconds minutes shell.json" },
+          description: "Idle time before the session locks (the Super+L path) · applies live",
+          keywords: "idle lock timeout seconds minutes shell.json session" },
 
         // ————————————————— Login screen (SDDM greeter) —————————————————
         { id: "lkSectionLogin", page: "lock", type: "section",

@@ -12,8 +12,27 @@ import QtQuick
 Singleton {
     id: root
 
-    // omarchy's default from shell.json ("idle": { "screensaver": 150 })
-    readonly property int idleSeconds: 150
+    // omarchy's default from shell.json ("idle": { "screensaver": 150 }),
+    // live: the settings app's "Screensaver after" chips write the same
+    // file through scripts/set-idle.sh and this watch re-arms the
+    // IdleMonitor below — no shell restart to move the timeout.
+    property int idleSeconds: 150
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const v = JSON.parse(text()).idle.screensaver
+                if (typeof v === "number" && v > 0)
+                    root.idleSeconds = v
+            } catch (e) {
+                console.log("Screensaver: shell.json parse", e)
+            }
+        }
+    }
 
     // ~/.local/bin is deliberately not on PATH in this setup (.bashrc), so
     // everything here is addressed by absolute path rather than by name.

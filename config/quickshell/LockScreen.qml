@@ -49,6 +49,38 @@ Item {
     property string failureMessage: ""
     property int failedAttempts: 0
 
+    // ——————— idle lock (shell.json "idle": { "lock": 300 }) ———————
+    // The settings app's "Lock after" chips write that key through
+    // scripts/set-idle.sh; this watch re-arms the monitor live. Fires
+    // the same beginLock() path Super+L takes, never while the session
+    // is already locked, and stays quiet while KeepAwake asked the
+    // session to stay up (same belt order as the screensaver's timer).
+    property int idleLockSeconds: 300
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const v = JSON.parse(text()).idle.lock
+                if (typeof v === "number" && v > 0)
+                    root.idleLockSeconds = v
+            } catch (e) {
+                console.log("Lock: shell.json parse", e)
+            }
+        }
+    }
+
+    IdleMonitor {
+        timeout: root.idleLockSeconds
+        onIsIdleChanged: {
+            if (isIdle && !root.locked && !Services.KeepAwake.active)
+                root.beginLock()
+        }
+    }
+
     // ——————— which layout is on show ———————
     // lock.style in settings.json — written by the preview row on
     // Settings ▸ Lock screen, read live, so the next lock picks the new

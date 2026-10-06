@@ -17,6 +17,11 @@ import "./services" as Services
 //   source "apps"    — default-apps.sh list/current/set: candidates are
 //                      the installed .desktop files claiming e.role's
 //                      document types; a pick applies through xdg-mime.
+//   source "sinks" /  — pactl -f json list + get-default-*: every sink
+//   "sources"         or source PipeWire exposes, a pick runs
+//                      set-default so @DEFAULT_SINK@/@DEFAULT_SOURCE@
+//                      (every volume/mute row) follows it. Lists stay
+//                      short, so no filter box.
 Item {
     id: root
 
@@ -25,6 +30,9 @@ Item {
     readonly property bool isFonts: e && e.source === "fonts"
     readonly property bool isHypr: e && e.source === "hypr"
     readonly property bool isApps: e && e.source === "apps"
+    readonly property bool isSinks: e && e.source === "sinks"
+    readonly property bool isSources: e && e.source === "sources"
+    readonly property bool isAudio: isSinks || isSources
 
     property var families: []
     property string current: ""
@@ -33,8 +41,13 @@ Item {
     property var apps: []
     property string appLabel: ""
 
-    readonly property var options: isHypr ? (e.options || []) : []
+    // audio source: [{ value: pactl name, label: description }]
+    property var audioDevs: []
+
+    readonly property var options: isAudio ? audioDevs
+        : isHypr ? (e.options || []) : []
     readonly property var shownList: {
+        if (isAudio) return audioDevs
         if (isApps) {
             const a = searchField.text.trim().toLowerCase()
             if (a === "") return apps
@@ -48,6 +61,10 @@ Item {
     readonly property string currentLabel: {
         if (isFonts) return current !== "" ? current : "—"
         if (isApps) return appLabel !== "" ? appLabel : (current !== "" ? current : "—")
+        if (isAudio) {
+            const hit = audioDevs.find(d => d.value === current)
+            return hit ? hit.label : (current !== "" ? current : "—")
+        }
         if (current === "") return "—"
         const hit = options.find(o => String(o.value) === current)
         return hit ? hit.label : current
@@ -69,6 +86,11 @@ Item {
             appsList.running = false; appsList.running = true
             appsCurrent.running = false; appsCurrent.running = true
         }
+        if (root.open && isAudio) {
+            // devices come and go — rescan every open, like apps
+            audioList.running = false; audioList.running = true
+            audioCurrent.running = false; audioCurrent.running = true
+        }
     }
 
     function pick(value) {
@@ -89,6 +111,12 @@ Item {
                                "set", String(root.e ? root.e.role : ""), String(value)]
             appsSet.running = false
             appsSet.running = true
+        } else if (isAudio) {
+            root.current = String(value)
+            audioSet.command = ["pactl", isSinks ? "set-default-sink" : "set-default-source",
+                                String(value)]
+            audioSet.running = false
+            audioSet.running = true
         } else {
             root.current = String(value)
             fontProc.command = [Quickshell.shellDir + "/scripts/set-font.sh", String(value)]
@@ -100,6 +128,8 @@ Item {
         if (isHypr) readProc.running = true
         if (isFonts) { scanProc.running = true; currentProc.running = true }
         if (isApps) { appsList.running = true; appsCurrent.running = true }
+        // the closed trigger must name the current device immediately
+        if (isAudio) { audioList.running = true; audioCurrent.running = true }
     }
 
     // Revert evaled baselines back — re-read so the closed button shows
@@ -209,6 +239,47 @@ Item {
         onExited: {
             appsCurrent.running = false; appsCurrent.running = true
             appsList.running = false;    appsList.running = true
+        }
+    }
+
+    // pactl: the device list as JSON (name + description) and the
+    // current default. `pactl -f json` has shipped with pactl for years
+    // and the parse is guarded — a format surprise leaves the empty
+    // list rather than a broken row.
+    Process {
+        id: audioList
+        command: ["pactl", "-f", "json", "list", root.isSinks ? "sinks" : "sources"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                try {
+                    JSON.parse(text).forEach(d => out.push({
+                        value: d.name,
+                        label: d.description || d.name
+                    }))
+                } catch (err) {
+                    console.log("dropdown: pactl json parse failed", err)
+                }
+                root.audioDevs = out
+            }
+        }
+    }
+
+    Process {
+        id: audioCurrent
+        command: ["pactl", root.isSinks ? "get-default-sink" : "get-default-source"]
+        stdout: StdioCollector {
+            onStreamFinished: root.current = text.trim()
+        }
+    }
+
+    // after set-default: re-read list + current so the closed trigger
+    // shows the device that actually became the default
+    Process {
+        id: audioSet
+        onExited: {
+            audioCurrent.running = false; audioCurrent.running = true
+            audioList.running = false;    audioList.running = true
         }
     }
 
