@@ -45,7 +45,7 @@ Roughly **173 MB / 701 files** — almost all of it is theme wallpapers.
 Fresh Arch box (needs `git`; `sudo` for `--apps`):
 
 ```bash
-git clone <this-repo> ~/.dotfiles
+git clone https://github.com/jordan-ops/selah.git ~/.dotfiles
 cd ~/.dotfiles
 ./install.sh --apps        # packages + boot services + configs + theme + greeter
 ./install.sh               # configs only, no sudo — safe to re-run any time
