@@ -2,11 +2,7 @@
 -- Hand edits are overwritten by the next Apply; hyprland.lua
 -- require()s this file last, so these override the defaults above.
 hl.config({
-    decoration = {
-        rounding = 5,
-    },
     general = {
-        gaps_out = 12,
-        gaps_in = 4,
+        gaps_out = 8,
     },
 })

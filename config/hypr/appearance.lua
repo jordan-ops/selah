@@ -39,11 +39,41 @@ hl.config({
             color        = 0xee1a1a1a,
         },
 
+        -- Matched to the lockscreen's wash (quickshell's lock/LockBackdrop
+        -- runs the wallpaper through MultiEffect at blur 1.0 / blurMax 128 /
+        -- multiplier 1.25). size 3 / passes 1 was the mildest thing that
+        -- still read as blur — it dimmed, it didn't frost, so a video behind
+        -- a transparent panel still fought the text on top of it. 8/3 is
+        -- Hyprland's stock size with real passes behind it: the backdrop
+        -- collapses into a colour field and the labels stay labels.
+        -- passes is what keeps size 8 from looking blocky (wiki: raise it
+        -- whenever size goes up); it costs GPU only where something is
+        -- actually transparent, and nothing in the default config is.
+        -- 2026-10 heat retune: 8/3 ran three full gaussian sweeps over the
+        -- bar + widget strips every time those surfaces damaged, which on
+        -- the HD 4600 meant continuous max-clock GPU. 4/1 is one cheaper
+        -- sweep — still frosts, a fraction of the fill rate. popups off:
+        -- their own words below called popups the worst offender, and a
+        -- menu over video isn't worth a per-frame blur.
+        -- 2026-10-09 (game-mode gap analysis): with Panel transparency at
+        -- 0 the pill is OPAQUE, so the qs-glass frost in rules.lua works
+        -- invisibly — every frame of damage anywhere under the bar's
+        -- 1920x560 slab re-runs the gaussian pass behind pixels no eye
+        -- can see. Measured idle with a steady app-damage stream: blur
+        -- on pinned the iGPU at 1269/1300MHz (game mode: 407MHz); blur
+        -- off alone dropped it to ~500 with zero visible change. So the
+        -- master switch now defaults OFF — the frost recipe below is
+        -- kept for the moment someone raises Panel transparency or flips
+        -- Settings ▸ Appearance ▸ Blur effects back on, which is the
+        -- only time any of this is visible. Windows are opacity 1.0 and
+        -- blur:popups is off, so nothing else ever fed this switch.
         blur = {
-            enabled   = true,
-            size      = 3,
+            enabled   = false,
+            size      = 4,
             passes    = 1,
             vibrancy  = 0.1696,
+
+            popups    = false,
         },
     },
 

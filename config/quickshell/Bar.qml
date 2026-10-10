@@ -171,8 +171,16 @@ Variants {
         // workspace down. Normal + a fixed exclusiveZone keeps the reserved
         // strip pinned at the rest-state bar height no matter how tall the
         // pill grows for notif/launcher/etc.
+        // Suspended-pill variant (Settings ▸ Bar ▸ Floating pill): the
+        // capsule hovers FLOAT_GAP px below the screen edge instead of
+        // sitting flush on it. One number lives here so the pill's offset
+        // and the reserved strip can never disagree — the zone has to
+        // cover the gap too, or windows slide up under the capsule and
+        // show through the strip above it.
+        readonly property bool pillFloating: Services.Settings.barFloating
+        readonly property real floatGap: pillFloating ? Services.Settings.barFloatGap : 0
         exclusionMode: ExclusionMode.Normal
-        exclusiveZone: 35
+        exclusiveZone: 35 + floatGap
 
         color:"transparent"
         // Clipboard.open was missing here, so the paste window sat at
@@ -231,6 +239,12 @@ Variants {
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
+            // Floating variant: the strip of wallpaper the capsule hovers
+            // over. Anchored (not margin-ed by hand elsewhere) so the
+            // tray dropdown, activity chips and EdgeLight's published
+            // pill rect all ride along — they hang off the pill, not the
+            // window edge.
+            anchors.topMargin: toplevel.floatGap
             // always clip: the tray chip lives INSIDE the pill now (its
             // room is carved out of both rest widths via pill.traySlot),
             // so nothing is meant to hang past the edge — clipping also
@@ -250,6 +264,11 @@ Variants {
             readonly property real morphRadius: tallMode ? 18 : height / 2
             bottomLeftRadius: morphRadius
 	    bottomRightRadius: morphRadius
+            // Flush on the edge, the top corners are cropped by the screen
+            // and stay square. Suspended, the same radius goes on top too
+            // or the capsule reads as a pill sliced in half.
+            topLeftRadius: toplevel.pillFloating ? morphRadius : 0
+            topRightRadius: toplevel.pillFloating ? morphRadius : 0
             // color:"#282828"
             // panel = same colour, alpha from appearance.transparency —
             // this rectangle is the surface for EVERY pill mode, so it
@@ -528,9 +547,10 @@ Variants {
                 power:        () => Qt.size(pill.powerRowWidth(), 24 + 64),
                 clipboard:    () => Qt.size(430, 12 + 30 + 8 + clipboardContent.listH + 12),
                 media:        () => Qt.size(528, 240),
-                // cards are 260x300 / 280x380; pill = card + 24px each
-                // side + 20px top/bottom (the media card's margins)
-                recording:    () => Qt.size(308, 340),
+                // cards are 260x340 / 280x380; pill = card + 24px each
+                // side + 20px top/bottom (the media card's margins).
+                // recording: 340 tall for the added Compress section.
+                recording:    () => Qt.size(308, 380),
                 updates:      () => Qt.size(328, 420)
             })
 
@@ -2214,7 +2234,7 @@ Variants {
             }
 
             // Recording card folded the same way — the rec chip or the
-            // control center's record tile morphs the pill to 308x340
+            // control center's record tile morphs the pill to 308x380
             // (modes.recording) and the timer/stop card centers inside.
             // Replaces the detached popup window + its FocusGrab.
             Item {

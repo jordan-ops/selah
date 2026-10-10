@@ -76,7 +76,7 @@ if [ -d "$ext_dir" ]; then
                 >/dev/null 2>&1 || true
         fi
     fi
-    exec "$bin" --app="$url" --load-extension="$ext_dir" "$@"
+    exec "$bin" --app="$url" --process-per-site --load-extension="$ext_dir" "$@"
 fi
 
-exec "$bin" --app="$url" "$@"
+exec "$bin" --app="$url" --process-per-site "$@"

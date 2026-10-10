@@ -6,14 +6,21 @@
 #
 # The launcher only knows quickshell's desktop-entry id ("Youtube",
 # "foot"), so resolve id -> file across the XDG search order (user dir
-# first — exactly how quickshell ranks them).
+# first — exactly how quickshell ranks them). Every $XDG_DATA_DIRS entry
+# counts, not just /usr/share: flatpak exports live in
+# <...>/flatpak/exports/share/applications and would otherwise be
+# invisible here ("No desktop entry" → silent no-op).
 #
-# Two branches, decided by WHERE that file lives:
+# Three branches, decided by WHERE the file lives / WHAT it runs:
 #
 #   * ~/.local/share/applications — a web app or hand-placed launcher:
 #     delete the .desktop file and the icon the installer put in hicolor,
 #     refresh the database. Silent when headless: quickshell detaches us
 #     and its own list refreshes when the file goes away.
+#
+#   * Exec=flatpak run … — a flatpak app. Deleting the file would only
+#     break the export; the ref has to go through flatpak itself, so this
+#     runs inside foot, titled "Uninstall <app>" like the pacman branch.
 #
 #   * anywhere else — a real package. sudo needs a TTY and the user must
 #     SEE what pacman is about to remove, so this runs inside foot, titled
@@ -32,8 +39,17 @@ fi
 id="${id%.desktop}"
 
 USER_DIR="$HOME/.local/share/applications"
+# XDG data dirs, in spec order. quickshell's env normally sets
+# XDG_DATA_DIRS (flatpak's session import does); the fallback list is the
+# same set spelled out so a bare environment still finds flatpaks.
+data_dirs="${XDG_DATA_DIRS:-$HOME/.local/share:$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share}"
 file=""
-for dir in "$USER_DIR" /usr/local/share/applications /usr/share/applications; do
+for dir in "$USER_DIR" ${data_dirs//:/ }; do
+    if [ -f "$dir/applications/$id.desktop" ]; then
+        file="$dir/applications/$id.desktop"
+        break
+    fi
+    # the loop above walks data ROOTS; also accept a direct applications dir
     if [ -f "$dir/$id.desktop" ]; then
         file="$dir/$id.desktop"
         break
@@ -95,7 +111,7 @@ case "$file" in
     ;;
 
 *)
-    # ---- system package: hand it to pacman in a real terminal --------
+    # ---- flatpak / system package: hand it to a real terminal --------
     if [ ! -t 0 ]; then
         # headless (quickshell) — foot -T supplies the title the Hyprland
         # rule matches to float+center this window; -w roomier than the
@@ -105,9 +121,47 @@ case "$file" in
 
     printf '\033[1mUninstall %s\033[0m\n\n' "$name"
 
+    exec_line=$(grep -m1 '^Exec=' "$file" | cut -d= -f2-)
+
+    # ---- flatpak: the ref goes through flatpak, never pacman --------
+    # Exec=flatpak run [flags…] <app-id> [args] — the id is the first
+    # token after "run" that is not a flag, a field code (%U) or a
+    # file-forwarding marker (@@u). Deleting the .desktop alone would
+    # only break the export; flatpak re-exports it on the next
+    # update/trickle, so the ref itself has to be removed.
+    set -- $exec_line
+    flatpak_id=""
+    while [ $# -gt 0 ]; do
+        case $1 in
+        flatpak | */flatpak)
+            if [ "${2:-}" = "run" ]; then
+                shift 2
+                while [ $# -gt 0 ]; do
+                    case $1 in
+                    -* | @@* | "%"*) shift ;;
+                    *) flatpak_id=$1; break ;;
+                    esac
+                done
+            fi
+            ;;
+        esac
+        shift
+    done
+
+    if [ -n "$flatpak_id" ]; then
+        printf 'Flatpak: %s\n\n' "$flatpak_id"
+        if flatpak uninstall "$flatpak_id"; then
+            printf '\n\033[32mRemoved %s.\033[0m\n' "$name"
+        else
+            printf '\n\033[31mRemoval failed or was cancelled.\033[0m\n'
+        fi
+        printf '\nPress Enter to close.'
+        read -r _ || true
+        exit 0
+    fi
+
     # Exec -> binary -> owning package. Field-code tokens (%U, %f, ...) and
     # `env VAR=x` prefixes are skipped so we resolve the app itself.
-    exec_line=$(grep -m1 '^Exec=' "$file" | cut -d= -f2-)
     set -- $exec_line
     bin=""
     while [ $# -gt 0 ]; do

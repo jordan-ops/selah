@@ -17,6 +17,12 @@ Singleton {
     // file through scripts/set-idle.sh and this watch re-arms the
     // IdleMonitor below — no shell restart to move the timeout.
     property int idleSeconds: 150
+    // async-load gate + recreation switch for saverIdle — same two as
+    // LockScreen.qml (idleLoaded/idleArmed): without the gate the
+    // notification is registered at construction with the 150 s default
+    // and quickshell never applies the shell.json value afterwards.
+    property bool idleLoaded: false
+    property bool saverArmed: true
 
     FileView {
         path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
@@ -31,7 +37,10 @@ Singleton {
             } catch (e) {
                 console.log("Screensaver: shell.json parse", e)
             }
+            // after the value, never before — see saverArmed
+            root.idleLoaded = true
         }
+        onLoadFailed: root.idleLoaded = true
     }
 
     // ~/.local/bin is deliberately not on PATH in this setup (.bashrc), so
@@ -71,20 +80,57 @@ Singleton {
         Quickshell.execDetached(["pkill", "-f", "[o]marchy-screensaver"])
     }
 
+    // Re-create the wayland notification so its countdown starts over —
+    // a fresh ext_idle_notification begins its timer at creation. The
+    // lock screen's watchdog calls this when it spots a resume from
+    // suspend: idle deadlines that expired while the machine was frozen
+    // must not fire the instant it wakes (the hypridle #73 re-sleep bug).
+    // Two event-loop turns, or quickshell coalesces the flip and
+    // re-creates nothing (see LockScreen.qml idleArmed).
+    Timer {
+        id: saverRearmTimer
+        interval: 50
+        onTriggered: root.saverArmed = true
+    }
+
+    function rearmIdle() {
+        if (root.saverArmed) {
+            root.saverArmed = false
+            saverRearmTimer.restart()
+        }
+    }
+
+    // The lock screen pushes its state here (its Binding writes this —
+    // a singleton can't see the root item, so state flows one way).
+    // Idle launches stay quiet once the session is locked: the lock
+    // surface already owns the screen, and a late timer (a "Lock after"
+    // chip shorter than "Screensaver after", or wake-expired timers)
+    // must not spawn pipes.sh terminals behind it. The manual paths —
+    // qs ipc call screensaver launch|force, the Control Center tile —
+    // deliberately ignore this.
+    property bool sessionLocked: false
+
     // ext-idle-notify-v1 — the same protocol hypridle listens on. Defaults
     // respect idle inhibitors (fullscreen video, etc.) and re-arm after
     // input, and the saver exiting on first input is handled inside the
     // runner itself, so no onResumed work is needed here.
     IdleMonitor {
+        id: saverIdle
         timeout: root.idleSeconds
+        enabled: root.saverArmed && root.idleLoaded
+        // chip edits go through FileView → idleSeconds: quickshell won't
+        // move a live notification's timeout, so re-create it instead
+        onTimeoutChanged: if (enabled) root.rearmIdle()
         onIsIdleChanged: {
             // KeepAwake (Control Center tile) refuses the saver while
             // it's armed — belt one; belt two is the Wayland
             // idle-inhibit surface KeepAwake itself advertises, which
             // keeps hypridle and friends quiet too. The screensaver
             // tile's own off flag is belt three: don't even fork the
-            // launcher when the saver is switched off.
-            if (isIdle && !KeepAwake.active && root.enabled)
+            // launcher when the saver is switched off. Belt four is the
+            // session lock: the chain is saver → lock → sleep, and past
+            // the lock step there is no saver anymore.
+            if (isIdle && !KeepAwake.active && root.enabled && !root.sessionLocked)
                 Quickshell.execDetached([root.launcher])
         }
     }
@@ -101,5 +147,13 @@ Singleton {
         // Control Center tile: on/off (flag + live runner), state probe
         function toggle(): void { root.toggle() }
         function status(): bool { return root.enabled }
+        function idle(): string {
+            return JSON.stringify({
+                saverEnabled: saverIdle.enabled,
+                saverTimeout: saverIdle.timeout,
+                saverIsIdle: saverIdle.isIdle,
+                idleSeconds: root.idleSeconds
+            })
+        }
     }
 }

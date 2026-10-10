@@ -52,6 +52,12 @@ Singleton {
         function apply(): void { root.applyPending() }
         function revert(): void { root.revertPending() }
         function pending(): int { return root.pendingCount }
+        // Hyprland reload for surfaces that read the config files instead
+        // of live evals (the shell's glass / qs-glass layer rule) — same
+        // safe path the keybind editor uses: persisted + pending values
+        // are re-applied right after, so an un-Applied tweak never
+        // silently reverts behind the user's back.
+        function reload(): void { root.reloadHypr() }
     }
 
     // hyprswitch rows record their last flip under persistKey; hyprctl

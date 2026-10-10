@@ -16,7 +16,14 @@ Rectangle {
     width: 620
     height: 520
     radius: 18
-    color: Services.Colors.background
+    // transparent, not background: the card lands exactly on the morphing
+    // pill, whose fill is already Colors.panel — and opaque `background`
+    // covered that fill, so the qs-glass rule had no alpha to frost and
+    // the clock was the one flat card in the shell. Root color stays
+    // clear so the pill's single panel layer does the tinting; painting
+    // panel here too would stack a second alpha over it (0.55 over 0.55
+    // = 0.80, a third less light than every sibling panel lets through).
+    color: "transparent"
 
     // Refreshes once a minute so "today" in the calendar and the date
     // string stay correct across midnight without needing a shell restart.

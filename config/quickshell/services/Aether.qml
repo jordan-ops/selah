@@ -131,6 +131,18 @@ Singleton {
     property var viewModel: []     // what the grid draws (see rebuildModel)
     property int currentIndex: 0
 
+    // rebuildModel() reassigns `viewModel`, and because that is a plain JS
+    // array QML reads it as a model RESET — every delegate is torn down.
+    // The grid has to snapshot its scroll offset while the old delegates
+    // are still alive and write it back once the new ones report a height,
+    // so the rebuild is bracketed by these two signals. See AetherGrid.
+    signal aboutToRebuild(bool isAppend)
+    signal rebuildSettled()
+    // A wallhaven page request just finished. The grid owns the scroll
+    // position and can see how close to the tail it is, so IT decides
+    // whether another page is wanted rather than being replayed blindly.
+    signal whMoreSettled()
+
     // ==================================================================
     // wallhaven
     // ==================================================================
@@ -151,10 +163,12 @@ Singleton {
     property int whLastPage: 1
     property int whTotal: 0
     property bool whSearching: false
-    // true while the in-flight whSearchProc run should APPEND its page to
-    // whItems instead of replacing them (infinite scroll). Set immediately
-    // before running=true and consumed by the parse, so it always describes
-    // the run that just finished.
+    // true when the in-flight whSearchProc run should APPEND its page to
+    // whItems instead of replacing them (infinite scroll). Set by
+    // startWhRun() along with the request it belongs to, consumed at the
+    // top of the parse — which is safe because `busy` keeps a newer run
+    // from starting before this one has been read. The rebuild takes it as
+    // an argument rather than re-reading it.
     property bool whAppending: false
     property string whLoadedFor: ""   // "sorting|query" behind whItems
 
@@ -446,7 +460,12 @@ Singleton {
             || (item.sub && item.sub.toLowerCase().includes(s))
     }
 
-    function rebuildModel() {
+    // isAppend: true only when the caller grew whItems in place (infinite
+    // scroll). The grid preserves its scroll offset for those rebuilds and
+    // starts at the top for every other one, so this is passed explicitly
+    // instead of being re-read from whAppending — by the time the rebuild
+    // runs the flag has already been consumed.
+    function rebuildModel(isAppend = false) {
         let out = []
         if (view === "wallhaven") {
             out = whItems.map(it => wallpaperCard(it, "wallhaven"))
@@ -474,8 +493,12 @@ Singleton {
         // result (wallhaven thumbnails carry no name to match against).
         const q = filter.trim()
         if (q && view !== "wallhaven") out = out.filter(it => matches(it, q))
+        // Fires before the reassignment, so the grid can snapshot its
+        // scroll offset while the old delegates are still alive.
+        aboutToRebuild(isAppend)
         viewModel = out
         if (currentIndex >= out.length) currentIndex = Math.max(0, out.length - 1)
+        rebuildSettled()
     }
 
     function selectedWallpaper() {
@@ -523,42 +546,59 @@ Singleton {
     }
     function whSearchKey() { return whSorting + "|" + filter.trim() }
 
-    function whSearch() {
-        if (view !== "wallhaven") return
-        if (whSearchProc.running) { whDirty = true; return }
-        whAppending = false
+    // Single entry point for a wallhaven fetch. The whole request state
+    // (q / sorting / pg) lives on whSearchProc and is read back by the
+    // parse, so a run may only start once the PREVIOUS one has been fully
+    // parsed and reaped: `running` alone is not enough, because
+    // StdioCollector can outlive the process (the same hazard this file
+    // documents for whDownloadProc) and a run started inside that window
+    // would inherit the old run's pg and append intent. `busy` is that
+    // handshake, cleared by finishRun() once both halves have reported.
+    function startWhRun(append, page) {
+        whSearchProc.outputFinished = false
+        whSearchProc.processExited = false
+        whSearchProc.busy = true
+        whAppending = append
         whSearching = true
         whSearchProc.q = filter.trim()
         whSearchProc.sorting = whSorting
-        whSearchProc.pg = 1
+        whSearchProc.pg = page
         whSearchProc.running = true
     }
 
+    function whSearch() {
+        if (view !== "wallhaven") return
+        if (whSearchProc.busy) { whDirty = true; return }
+        startWhRun(false, 1)
+    }
+
     // Infinite scroll (replaces the old ◀ ▶ pager): AetherGrid calls this
-    // when the viewport reaches the end of the loaded results. One page at
-    // a time; the next page is requested speculatively (whPage only advances
-    // when the response echoes it back), so a failed fetch retries the same
-    // page instead of skipping it. New searches/sortings reset to page 1 via
-    // whSearch() and replace the list as before.
+    // when the viewport comes within about a screen of the tail of the
+    // loaded results — deliberately NOT at the very end, because a page
+    // costs ~2 s and almost all of that is network to wallhaven.cc, so
+    // waiting until the last pixel means watching a static screen for two
+    // seconds. One page at a time; the next page is requested
+    // speculatively (whPage only advances when the response echoes it
+    // back), so a failed fetch retries the same page instead of skipping
+    // it. New searches/sortings reset to page 1 via whSearch() and
+    // replace the list as before.
     //
-    // A call that lands while a fetch is still exiting (stdout already
-    // closed and parsed, QProcess not yet reaped — observed on slow
-    // wallhaven responses) parks in whMorePending and replays at exit,
-    // otherwise the grid's one-shot signal would be lost and the next page
-    // would never load until the user scrolled again.
-    property bool whMorePending: false
+    // A call that lands while a run is still in flight — including the
+    // window after exit where the output has not been parsed yet, since
+    // `busy` covers it — is simply dropped. finishRun() then emits
+    // whMoreSettled() unconditionally, which brings the grid back to
+    // re-evaluate the prefetch condition, so no trigger can be lost. (This
+    // used to park such calls in whMorePending and replay them blindly,
+    // which could not know how close to the end the viewport still was.)
     function whMore() {
         if (view !== "wallhaven") return
-        if (whSearchProc.running) { whMorePending = true; return }
-        if (whPage >= whLastPage) { whMorePending = false; return }
-        whMorePending = false
-        whAppending = true
-        whSearching = true
-        whSearchProc.q = filter.trim()
-        whSearchProc.sorting = whSorting
-        whSearchProc.pg = whPage + 1
-        whSearchProc.running = true
+        if (whSearchProc.busy) return
+        if (whPage >= whLastPage) return
+        startWhRun(true, whPage + 1)
     }
+    // Set by whSearch() when a fresher query arrives while a run is in
+    // flight; consumed by finishRun(), which re-runs it so the newest
+    // query wins.
     property bool whDirty: false
 
     // ==================================================================
@@ -923,12 +963,45 @@ Singleton {
         property string q: ""
         property string sorting: "toplist"
         property int pg: 1
+        // Two-flag handshake, same shape as whDownloadProc: stdout can be
+        // collected AFTER the process is reaped, so a run only counts as
+        // finished once BOTH halves have reported. Until then `busy` stops
+        // startWhRun() from launching the next run on top of this one's
+        // q/pg/append state — gating on `running` alone was not enough and
+        // made every append read as a fresh search.
+        property bool busy: false
+        property bool outputFinished: false
+        property bool processExited: false
         running: false
         command: ["aether", "--wallhaven-thumbs", q,
                   "--sorting", sorting, "--page", String(pg),
                   "--json", "--pages", "1"]
+
+        function finishRun() {
+            if (!outputFinished || !processExited) return
+            busy = false
+            root.whSearching = false
+            root.whAppending = false
+            // a fresher query landed while this run was in flight
+            if (root.whDirty) {
+                root.whDirty = false
+                Qt.callLater(() => root.whSearch())
+            }
+            // The request is settled. The grid holds the scroll position
+            // and the prefetch margin, so IT decides whether another page
+            // is wanted; deferred so it lands after any re-search above.
+            Qt.callLater(() => root.whMoreSettled())
+        }
+
         stdout: StdioCollector {
             onStreamFinished: {
+                // Consume the append intent exactly once, for THIS run —
+                // busy gating guarantees no newer run has overwritten it.
+                // rebuildModel() takes it as an argument rather than
+                // re-reading the flag, so a throw below cannot mislabel a
+                // later rebuild.
+                const appending = root.whAppending
+                root.whAppending = false
                 try {
                     const d = JSON.parse(text)
                     if (Array.isArray(d.wallpapers)) {
@@ -951,18 +1024,17 @@ Singleton {
                         }
                         root.whLoadedFor = whSearchProc.sorting + "|" + whSearchProc.q
                         root.whSearching = false
-                        if (root.whAppending) {
+                        if (appending) {
                             // infinite scroll: grow the list in place — the
                             // selection and the grid's scroll position must
                             // not jump when the new page lands under it
-                            root.whAppending = false
                             root.whItems = root.whItems.concat(items)
                         } else {
                             root.whItems = items
                             root.currentIndex = 0
                             if (root.whItems.length) Qt.callLater(extractTimer.restart)
                         }
-                        root.rebuildModel()
+                        root.rebuildModel(appending)
                         root.statusMsg = root.whItems.length === 0 ? "no wallhaven results" : ""
                     } else if (d.error) {
                         root.statusMsg = String(d.error)
@@ -971,20 +1043,14 @@ Singleton {
                     root.statusMsg = "wallhaven search failed"
                     console.warn("wallhaven parse:", e)
                 }
+                // outside the try so a parse failure cannot latch `busy`
+                whSearchProc.outputFinished = true
+                whSearchProc.finishRun()
             }
         }
         onExited: () => {
-            root.whSearching = false
-            if (root.whDirty) {
-                root.whDirty = false
-                Qt.callLater(() => root.whSearch())
-            }
-            // a whMore() that arrived during this run's exit window replays
-            // now that the proc is genuinely free (see whMorePending)
-            if (root.whMorePending) {
-                root.whMorePending = false
-                Qt.callLater(() => root.whMore())
-            }
+            whSearchProc.processExited = true
+            whSearchProc.finishRun()
         }
     }
 

@@ -49,13 +49,42 @@ Item {
     property string failureMessage: ""
     property int failedAttempts: 0
 
-    // ——————— idle lock (shell.json "idle": { "lock": 300 }) ———————
-    // The settings app's "Lock after" chips write that key through
-    // scripts/set-idle.sh; this watch re-arms the monitor live. Fires
-    // the same beginLock() path Super+L takes, never while the session
-    // is already locked, and stays quiet while KeepAwake asked the
-    // session to stay up (same belt order as the screensaver's timer).
+    // ——————— idle chain (shell.json "idle": { lock, sleep }) ———————
+    // Stage two of three: screensaver (services/Screensaver.qml) →
+    // lock (below) → suspend. The settings app's chips write the keys
+    // through scripts/set-idle.sh; the watch below re-arms the monitors
+    // live. Every stage has its own timeout and skips independently —
+    // screensaver off just drops its step, lock still fires at
+    // "Lock after" (stage three re-checks the lock itself, so the order
+    // holds even if the chips are configured out of order). All stages
+    // stay quiet while KeepAwake asked the session to stay up (same
+    // belt order everywhere), and the same beginLock() path Super+L
+    // takes — never while the session is already locked.
     property int idleLockSeconds: 300
+    // Stage three, the suspend step: 0 = the "Never" chip, which stops
+    // the monitor and the watchdog below entirely.
+    property int idleSleepSeconds: 1800
+    // wall ms until a refused `systemctl suspend` may be retried
+    property double sleepBackoffUntil: 0
+    // awakeClock reading of the last observed input (0 = shell start —
+    // the clock starts there too)
+    property double lastActivityMs: 0
+    // armed = the monitors exist and count. Flipping this false→true is
+    // how rearmIdle() re-creates them; it is a separate property because
+    // assigning to `enabled` directly would shatter the bindings the
+    // monitors declare on it. The flip must be SPLIT across two
+    // event-loop turns (rearmTimer below): a synchronous false→true is
+    // coalesced by quickshell into a no-op and never touches the wire,
+    // while a persisted false destroys the ext_idle_notification and the
+    // later true re-creates it with the current timeout.
+    property bool idleArmed: true
+    // FileView loads async, but quickshell registers each IdleMonitor's
+    // Wayland notification at construction with whatever `timeout` reads
+    // then — and NEVER applies later timeout changes (proven on the
+    // wire: no destroy, no re-request). So the monitors must stay
+    // disabled until shell.json has been applied, or they'd count with
+    // the QML defaults (300 s / 1800 s) forever.
+    property bool idleLoaded: false
 
     FileView {
         path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
@@ -64,21 +93,173 @@ Item {
         onFileChanged: reload()
         onLoaded: {
             try {
-                const v = JSON.parse(text()).idle.lock
-                if (typeof v === "number" && v > 0)
-                    root.idleLockSeconds = v
+                const d = JSON.parse(text()).idle
+                if (typeof d.lock === "number" && d.lock > 0)
+                    root.idleLockSeconds = d.lock
+                // >= 0: sleep alone accepts 0, it is the "Never" chip
+                if (typeof d.sleep === "number" && d.sleep >= 0)
+                    root.idleSleepSeconds = d.sleep
             } catch (e) {
                 console.log("Lock: shell.json parse", e)
             }
+            // after the values, never before: the monitors arm on this
+            root.idleLoaded = true
         }
+        // unreadable file → keep the QML defaults and arm anyway; a
+        // broken config must degrade to the default chain, not kill it
+        onLoadFailed: root.idleLoaded = true
     }
 
     IdleMonitor {
+        id: lockIdle
         timeout: root.idleLockSeconds
+        enabled: root.idleArmed && root.idleLoaded
+        // quickshell ignores timeout changes on a live notification —
+        // this recreate is what makes a chip edit take effect on the wire
+        onTimeoutChanged: if (enabled) root.rearmIdle()
         onIsIdleChanged: {
             if (isIdle && !root.locked && !Services.KeepAwake.active)
                 root.beginLock()
         }
+    }
+
+    // ——————— idle suspend (stage three) ———————
+    // QElapsedTimer is CLOCK_MONOTONIC, which freezes while the system
+    // is suspended — this is the awake-time clock every "idle long
+    // enough?" check below runs against. Wall time jumps across a nap,
+    // this doesn't, which is what defuses the known Hyprland/hypridle
+    // wake bug (hypridle#73): idle deadlines that expire during suspend
+    // fire the instant the machine resumes, and a naive sleep stage
+    // would lock-and-re-sleep it before you can type. Here that wake
+    // reads ~0 s of awake-idle and is refused; the watchdog restarts
+    // every countdown from the moment of wake instead.
+    ElapsedTimer { id: awakeClock }
+
+    // Fresh countdown for both monitors: a fresh ext_idle_notification
+    // starts its timer at creation. The false→true must span two event
+    // loop turns (see idleArmed above) or quickshell coalesces it into a
+    // no-op and nothing is re-created at all.
+    Timer {
+        id: rearmTimer
+        interval: 50
+        onTriggered: root.idleArmed = true
+    }
+
+    function rearmIdle() {
+        if (root.idleArmed) {
+            root.idleArmed = false
+            rearmTimer.restart()
+        }
+        Services.Screensaver.rearmIdle()
+    }
+
+    IdleMonitor {
+        id: sleepIdle
+        // timeout must be positive; the enabled flag below is what
+        // "Never" turns off, the value never reaches 0 while enabled
+        timeout: Math.max(root.idleSleepSeconds, 1)
+        enabled: root.idleSleepSeconds > 0 && root.idleArmed && root.idleLoaded
+        onTimeoutChanged: if (enabled) root.rearmIdle()
+        onIsIdleChanged: {
+            if (isIdle) root.trySleep()
+            else root.lastActivityMs = awakeClock.elapsedMs()
+        }
+    }
+
+    // Every gate is re-checked on each call — the watchdog poll below
+    // invokes this at arbitrary times, not only at the exact timeout.
+    function trySleep() {
+        if (root.idleSleepSeconds <= 0) return            // "Never" chip
+        if (Services.KeepAwake.active) return
+        if (!sleepIdle.isIdle) return                     // fresh input, or a Wayland
+                                                          // idle inhibitor (video)
+        if (Date.now() < root.sleepBackoffUntil) return   // suspend refused recently
+        // Awake-idle, not wall-idle (see awakeClock above). The 5 s
+        // slack absorbs the event round-trip: our input timestamp lands
+        // a hair after the compositor's, so the exact-timeout event can
+        // read microseconds short of the target.
+        if (awakeClock.elapsedMs() - root.lastActivityMs + 5000 < root.idleSleepSeconds * 1000)
+            return
+        // Ordering + safety: never sleep an unlocked session. Lock not
+        // engaged yet → engage it now (beginLock() refuses without
+        // /etc/pam.d/qs-lock and drags us down with it — an unlocked
+        // machine must stay awake).
+        if (!root.locked && !root.beginLock()) return
+        sleepGrace.running = true
+    }
+
+    // One beat before freezing userspace so the session-lock surface has
+    // time to map over whatever was on screen. Re-checked when it lands:
+    // input may have arrived during the grace.
+    Timer {
+        id: sleepGrace
+        interval: 1000
+        onTriggered: {
+            if (!sleepIdle.isIdle || Services.KeepAwake.active) return
+            if (!root.locked) return
+            suspendProc.running = true
+        }
+    }
+
+    Process {
+        id: suspendProc
+        command: ["systemctl", "suspend"]
+        onExited: (code) => {
+            // polkit denial, an active sleep inhibitor (fwupd, apt…) …
+            if (code !== 0) {
+                root.sleepBackoffUntil = Date.now() + 120000
+                notifySuspendFailed.running = true
+            }
+        }
+    }
+
+    Process {
+        id: notifySuspendFailed
+        command: ["hyprctl", "notify", "3", "6000", "rgba(ffcc66ee)",
+                  "Idle sleep failed (systemctl suspend) — will retry in 2 min"]
+    }
+
+    // Wake watchdog + sleep safety net — one 15 s tick while the sleep
+    // stage is configured. Two jobs:
+    //  1. Resume detection: the wall clock jumps across a suspend, the
+    //     awakeClock does not — a jump well past the interval means we
+    //     just woke. Then reset the awake-idle baseline, re-arm all
+    //     three monitors (countdowns restart from wake instead of
+    //     firing on deadlines that expired while frozen) and lock if
+    //     the machine slept unlocked (lid closed mid-work: the
+    //     before-sleep lock, delivered late but at wake).
+    //  2. Retry net: a monitor can sit isIdle=true across a suspend
+    //     with no new event for trySleep() to react to.
+    property double lastWallAt: 0
+    Timer {
+        interval: 15000
+        repeat: true
+        running: root.idleSleepSeconds > 0
+        onTriggered: {
+            const wall = Date.now()
+            // >20 s between 15 s ticks = ≥5 s of suspend (the wall clock
+            // walked while the monotonic Qt timer didn't; NTP is not
+            // running on this box, so nothing else moves the wall this
+            // far) — even a short nap must restart every countdown, or
+            // the stale isIdle sails into trySleep() at the first tick
+            // after wake (hypridle #73 with a short nap).
+            if (root.lastWallAt !== 0 && wall - root.lastWallAt > interval + 5000) {
+                root.lastActivityMs = awakeClock.elapsedMs()
+                root.rearmIdle()
+                if (!root.locked) root.beginLock()
+            }
+            root.lastWallAt = wall
+            root.trySleep()
+        }
+    }
+
+    // The screensaver singleton can't see this root item, so the lock
+    // state travels to it — see Screensaver.sessionLocked: past the
+    // lock step of the chain the saver stays quiet.
+    Binding {
+        target: Services.Screensaver
+        property: "sessionLocked"
+        value: root.locked
     }
 
     // ——————— which layout is on show ———————
@@ -144,6 +325,11 @@ Item {
         lockRequested = true
         logEvent("lock-requested")
         sessionLock.locked = true
+        // The lock replaces the screensaver in the idle chain: kill the
+        // pipes.sh runners so they don't keep burning CPU behind the
+        // lock surface — their input loop can never see the keystrokes
+        // now (they go to the lock), so nothing else would stop them.
+        Services.Screensaver.stopRunner()
         return true
     }
 
@@ -300,6 +486,12 @@ Item {
             return "ok"
         }
 
+        // diagnostic: replay the watchdog's rearm path on demand
+        function rearm(): string {
+            root.rearmIdle()
+            return "rearmed"
+        }
+
         function status(): string {
             return JSON.stringify({
                 locked: root.locked,
@@ -307,7 +499,15 @@ Item {
                 secure: sessionLock.secure,
                 passwordPam: root.passwordPamConfigured,
                 authenticating: root.authenticatingPassword,
-                failedAttempts: root.failedAttempts
+                failedAttempts: root.failedAttempts,
+                sleepSeconds: root.idleSleepSeconds,
+                sleepIdle: sleepIdle.isIdle,
+                awakeIdleSeconds: Math.round((awakeClock.elapsedMs() - root.lastActivityMs) / 1000),
+                idleArmed: root.idleArmed,
+                lockIdleEnabled: lockIdle.enabled,
+                lockIdleTimeout: lockIdle.timeout,
+                sleepIdleEnabled: sleepIdle.enabled,
+                sleepIdleTimeout: sleepIdle.timeout
             })
         }
     }

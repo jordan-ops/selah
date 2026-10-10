@@ -20,11 +20,18 @@ Singleton {
     // raw store — defaults live here, loaded file merges over them
     property var values: ({
         "bar.restStyle": "compact",
+        // the suspended-pill variant (Bar.qml lifts the capsule off the
+        // top edge) — off keeps the flush bar every theme expects
+        "bar.floating": false,
         "effects.ripple": true,
         "effects.edgelight": true,
         // short chime on high-priority capsule flashes (plug/charge) —
         // Bar's chime(), silenced from Settings ▸ Animations
         "effects.tone": true,
+        // post-stop x264 re-encode of screen recordings (the recording
+        // card's Compress toggle). ON by default: wf-recorder writes
+        // near-lossless x264, which is what made these files huge.
+        "recording.compress": true,
         "lock.style": "classic",
         // the desktop clock widget — off until asked for. x/y of -1 mean
         // "never placed": clockBox() centres it instead (see below), so a
@@ -45,6 +52,18 @@ Singleton {
 
     // typed accessor for keys the shell binds on — one line per new key
     readonly property string barRestStyle: values["bar.restStyle"] || "compact"
+    // Suspended pill variant: the capsule hovers just below the screen
+    // edge instead of sitting flush on it. Settings ▸ Bar ▸ Floating
+    // pill, or `qs ipc call settings set bar.floating true`.
+    readonly property bool barFloating:
+        values["bar.floating"] === true || values["bar.floating"] === "true"
+    // The gap itself, in px — ONE number, shared by Bar.qml (the pill's
+    // top offset and the reserved strip) and by anything that has to
+    // GUESS the pill's position without the bar having published it
+    // (BarMetrics' fallback rect below). Keeping it here is what stops
+    // the notification glow sitting flush on the edge while the capsule
+    // floats.
+    readonly property int barFloatGap: 8
     // iPhone-style % number on the battery ring — hidden until toggled
     readonly property bool barBatteryText:
         values["bar.batteryText"] === true || values["bar.batteryText"] === "true"
@@ -53,6 +72,13 @@ Singleton {
     readonly property bool effectsTone:
         values["effects.tone"] === undefined || values["effects.tone"] === true
         || values["effects.tone"] === "true"
+    // Compress toggle on the recording card (ScreenRecording) — "default
+    // true, tolerate the strings IPC writes over the wire", same reading
+    // style as effectsTone/widgetsShow.
+    readonly property bool recordingCompress:
+        values["recording.compress"] === undefined
+        || values["recording.compress"] === true
+        || values["recording.compress"] === "true"
     // master switch for the widget layer (widgets/WidgetScreen) — mirrors
     // effectsTone's "default true, tolerate IPC strings" reading
     readonly property bool widgetsShow:

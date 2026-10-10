@@ -17,7 +17,11 @@ Rectangle {
     readonly property bool isAudio: Services.ControlCenter.advancedPanel === "audio"
     height: isAudio ? Math.min(380, 56 + Math.max(1, Services.Volume.sinks.length) * 50) : 380
     radius: 18
-    color: Services.Colors.background
+    // panel, not background — this card is the other half of the control
+    // center, so it takes the same appearance.transparency alpha as the
+    // pill it docks beside (opaque background would have made the blur
+    // rule below it do nothing: no alpha in, no frost out)
+    color: Services.Colors.panel
 
     readonly property bool isNetwork: Services.ControlCenter.advancedPanel === "network"
     readonly property bool isBluetooth: Services.ControlCenter.advancedPanel === "bluetooth"

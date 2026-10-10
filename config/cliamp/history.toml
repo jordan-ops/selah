@@ -1,19 +1,118 @@
 [[entry]]
-played_at = "2026-10-05T21:01:35Z"
+played_at = "2026-10-10T09:48:52Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
 genre = "pop"
 
 [[entry]]
-played_at = "2026-10-05T20:06:15Z"
-path = "http://5229.cloudrad.io:8316/;"
-title = "Capital FM"
+played_at = "2026-10-09T19:03:14Z"
+path = "https://radiopanther.radiolebowski.com/play"
+title = "CLASSIC HITS RADIO 70 80 DiscoFunk ModernSoul Boogie"
+genre = "1970s,1980s,70's,70s,70s disco,80,80's,80s,classic hits"
 
 [[entry]]
-played_at = "2026-10-05T15:30:00Z"
+played_at = "2026-10-09T19:00:10Z"
+path = "http://kisswestcoast.ice.infomaniak.ch/kisswestcoast-64.aac"
+title = "Kiss West Coast"
+
+[[entry]]
+played_at = "2026-10-09T18:59:27Z"
+path = "https://icecast.starradiogroup.com/radio/wxkjmain"
+title = "103.7 KISS FM - WXKJ"
+
+[[entry]]
+played_at = "2026-10-09T18:57:01Z"
+path = "https://live-bauerkiss.sharp-stream.com/kissfresh.aac?direct=true&aw_0_1st.skey=1602676850&rp_source=1&=&&___cb=60456375243858"
+title = " KISS XTRA: Black Music & Culture"
+genre = "bauer radio,contemporary r&b,dab,digital radio,england,entertainment,europe,hip hop,hip-hop,hiphop,kiss,kiss fm,kiss xtra,london,moi merino,r&b,r&b music,radio,rayo,uk,united kingdom"
+
+[[entry]]
+played_at = "2026-10-09T18:55:39Z"
+path = "https://stream.revma.ihrhls.com/zc1485"
+title = "KISS 96.1 "
+genre = "pop"
+
+[[entry]]
+played_at = "2026-10-09T18:55:12Z"
+path = "http://media-ice.musicradio.com/CapitalSouthCoastMP3"
+title = "Capital FM South Coast 103.2"
+genre = "commercial,pop,south coast"
+
+[[entry]]
+played_at = "2026-10-09T18:54:58Z"
+path = "http://ice-the.musicradio.com/Capital"
+title = "Capital FM AAC"
+genre = "top 40"
+
+[[entry]]
+played_at = "2026-10-09T18:47:10Z"
+path = "http://5229.cloudrad.io:8316/;"
+title = "91. 3 Capital fm"
+genre = "news"
+
+[[entry]]
+played_at = "2026-10-09T18:45:57Z"
+path = "http://ice-the.musicradio.com/CapitalManchester"
+title = "Capital FM Manchester"
+genre = "manchester,pop"
+
+[[entry]]
+played_at = "2026-10-09T18:44:58Z"
 path = "https://stream.revma.ihrhls.com/zc1629"
 title = "100.3 KISS FM"
 genre = "pop,top 40"
+
+[[entry]]
+played_at = "2026-10-09T13:35:56Z"
+path = "https://kathy.torontocast.com:2880/;?type=http&nocache=1606748882"
+title = "Otaku Music Radio [192k] · Japan"
+
+[[entry]]
+played_at = "2026-10-09T13:35:42Z"
+path = "http://158.69.227.214:8137/stream"
+title = "Kawaii Anime Radio [32k] · Japan"
+genre = "anime"
+
+[[entry]]
+played_at = "2026-10-09T13:35:35Z"
+path = "https://radio.stereoanime.com/listen/stereoanime/128"
+title = "stereo anime [128k] · Japan"
+genre = "anime,anime endings,anime openings,anime radio,j-pop,j-rock,japanese anime soundtracks game jpop vgm ost,japonese anime soundtracks,video game music,video games,videogame music"
+
+[[entry]]
+played_at = "2026-10-09T13:35:09Z"
+path = "https://j.onlyhit.us/play"
+title = "OnlyHits Japan [128k] · Japan"
+
+[[entry]]
+played_at = "2026-10-09T13:34:48Z"
+path = "https://play.streamafrica.net/japancitypop"
+title = "BOX : Japan City Pop - 日本のシティポップ · Japan"
+genre = "city pop,japanese"
+
+[[entry]]
+played_at = "2026-10-09T13:34:29Z"
+path = "https://radio.gotanno.love/;"
+title = "Gotanno FM 89.2 [128k] · Japan"
+genre = "indie pop,jpop"
+
+[[entry]]
+played_at = "2026-10-06T03:10:02Z"
+path = "https://c32.radioboss.fm:18451/stream?1641237600584"
+title = "Gospel Radio East Africa"
+genre = "christian-gospel"
+
+[[entry]]
+played_at = "2026-10-06T03:09:47Z"
+path = "http://stream.zeno.fm/3fmqr74a7f8uv"
+title = "Nigerian Gospel Music Radio (MP3)"
+genre = "christian,gospel,gospel music,religious"
+
+[[entry]]
+played_at = "2026-10-06T03:09:37Z"
+path = "http://bigrradio.cdnstream1.com/5199_128"
+title = "Big R Radio - Gospel Channel"
+genre = "gospel"
 
 [[entry]]
 played_at = "2026-10-03T04:44:30Z"

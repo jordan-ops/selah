@@ -4,7 +4,11 @@ import "./services" as Services
 Rectangle {
     id: root
     width: 260
-    height: 300
+    // 340 (was 300): the Output/Compress section joined the column, and
+    // the content column is centred so the leftover slack splits evenly
+    // instead of pooling under the buttons. Bar's modes.recording follows
+    // at card + 20px top/bottom = 380.
+    height: 340
     radius: 18
     // In-pill card now (was a standalone popup window): tonal surface +
     // hairline outline, the mediaCard language — `background` would vanish
@@ -25,9 +29,15 @@ Rectangle {
         }
     }
 
+    // centred rather than anchored to the top: the sections drop out
+    // entirely while recording (the timer state is much shorter than the
+    // setup state), and a top-anchored column left a dead band under the
+    // buttons in whichever state was the short one.
     Column {
-        anchors.fill: parent
-        anchors.margins: 16
+        anchors.centerIn: parent
+        // same 16px inset the anchors.margins used to provide, applied to
+        // the width so centring keeps the sides padded too
+        width: parent.width - 32
         spacing: 14
 
         // HEADER. No anchors inside a Row — Qt refuses outright: "Cannot
@@ -80,8 +90,9 @@ Rectangle {
             }
         }
 
-        // Big elapsed display while recording, otherwise show setup/error
-        // state instead of pretending the recorder is ready after a failure.
+        // Big elapsed display while recording, otherwise show setup/
+        // processing/error state instead of pretending the recorder is
+        // ready after a failure.
         Text {
             font.family: Services.Fonts.family
             width: parent.width
@@ -90,11 +101,14 @@ Rectangle {
                 ? Services.ScreenRecording.elapsedDisplay
                 : Services.ScreenRecording.starting
                     ? "Starting…"
-                    : Services.ScreenRecording.lastError !== ""
-                        ? Services.ScreenRecording.lastError
-                        : "Ready"
+                    : Services.ScreenRecording.processing
+                        ? "Processing…"
+                        : Services.ScreenRecording.lastError !== ""
+                            ? Services.ScreenRecording.lastError
+                            : "Ready"
             font.pixelSize: Services.ScreenRecording.recording ? 30
-                : Services.ScreenRecording.starting ? 18
+                : Services.ScreenRecording.starting
+                    || Services.ScreenRecording.processing ? 18
                 : Services.ScreenRecording.lastError !== "" ? 11 : 14
             font.weight: Font.Light
             color: Services.ScreenRecording.recording
@@ -192,6 +206,37 @@ Rectangle {
                     }
                     MouseArea { anchors.fill: parent; onClicked: Services.ScreenRecording.toggleSystem() }
                 }
+            }
+        }
+
+        // ---------------- Output ----------------
+        // Compress is the answer to "recordings come out very large": a
+        // toggle that re-encodes the file after Stop (services/
+        // ScreenRecording.qml). It stays visible while a compress job is
+        // running so the state is readable, and hides during a live
+        // recording like the other setup controls.
+        Column {
+            width: parent.width
+            spacing: 6
+            visible: !Services.ScreenRecording.recording && !Services.ScreenRecording.starting
+
+            Text { font.family: Services.Fonts.family; text: "Output"; font.pixelSize: 11; color: Services.Colors.text_muted }
+
+            Rectangle {
+                width: parent.width
+                height: 30
+                radius: 8
+                color: Services.ScreenRecording.compress
+                    ? Qt.rgba(Services.Colors.accent.r, Services.Colors.accent.g, Services.Colors.accent.b, 0.18)
+                    : Services.Colors.surface
+                Text {
+                    font.family: Services.Fonts.family
+                    anchors.centerIn: parent
+                    text: Services.ScreenRecording.compress ? "Compress ✓" : "Compress"
+                    font.pixelSize: 11
+                    color: Services.ScreenRecording.compress ? Services.Colors.accent : Services.Colors.text
+                }
+                MouseArea { anchors.fill: parent; onClicked: Services.ScreenRecording.toggleCompress() }
             }
         }
 

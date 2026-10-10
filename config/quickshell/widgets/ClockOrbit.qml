@@ -49,9 +49,13 @@ WidgetHost {
     }
 
     property real shownSec: 6 * (t.second + 1)
+    // duration 900→200 (2026-10 heat fix): a 900ms ease every second kept
+    // this fullscreen surface dirty ~90% of the time, pinning the iGPU at
+    // max clock and costing the shell ~14% of a core. 200ms keeps the
+    // ring's glide but settles between ticks — ~4x less repaint.
     Behavior on shownSec {
         enabled: t.second > 0
-        NumberAnimation { duration: 900; easing.type: Easing.Linear }
+        NumberAnimation { duration: 200; easing.type: Easing.Linear }
     }
 
     component ArcText: Item {

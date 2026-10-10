@@ -126,6 +126,23 @@ hl.window_rule({
 	center = true,
 })
 
+-- foot's frost is CLIENT-side: foot.ini [colors-dark] sets alpha=0.8 and
+-- blur=yes, which asks Hyprland through ext-background-effect-v1 to blur
+-- what shows through the terminal. decoration:blur never touched foot —
+-- the protocol hands blur control to the client for capable windows, and
+-- foot only becomes capable once it is itself transparent. Because that
+-- 0.8 now lives in the app buffer, the global decoration opacity would
+-- multiply it down to 0.64 and the terminal would sit next to kitty at
+-- 0.8 visibly clearer. This override hands the compositor's share back:
+-- 1.0 x app 0.8 = 0.8 total, identical weight to every other window.
+-- Trade-off: foot ignores future changes to active/inactive_opacity
+-- (its weight is set in foot.ini from here on).
+hl.window_rule({
+	name = "foot-app-alpha",
+	match = { class = "^foot$" },
+	opacity = "1.0 override 1.0 override 1.0 override",
+})
+
 -- Layer rules also return a handle.
 -- local overlayLayerRule = hl.layer_rule({
 --     name  = "no-anim-overlay",
@@ -157,4 +174,48 @@ hl.window_rule({
 	float = true,
 	animation = "slide",
 	workspace = "special:screensaver silent",
+})
+
+-- ——————— FROSTED GLASS FOR THE SHELL ———————
+-- The lockscreen blurs itself: lock/LockBackdrop.qml pushes the wallpaper
+-- through MultiEffect (blur 1.0, blurMax 128, multiplier 1.25) because a
+-- session-lock surface owns every pixel it draws. The shell can't work
+-- that way — the bar, the control center and the settings card paint OVER
+-- content that belongs to other surfaces, and Qt has no way to sample
+-- across a Wayland boundary. The compositor is the only layer that can,
+-- so this hands Hyprland the job: frost whatever sits underneath a
+-- quickshell surface. That is the whole reason a raised "Panel
+-- transparency" stays legible — a video behind the bar dissolves into a
+-- color field instead of shredding the labels drawn on top of it.
+--
+-- Namespaces: `quickshell` is everything Bar.qml owns — the bar slab, all
+-- the pill modes, and the three PopupWindows (tray, control center
+-- advanced, settings) that quickshell maps under the shell's own
+-- namespace. `aether-picker` is the wallpaper/palette overlay, the other
+-- surface that paints with Colors.panel.
+--
+-- ignore_alpha is the load-bearing half. The bar's surface is a 1920x560
+-- slab whose only non-transparent pixels are the pill, and Hyprland blurs
+-- the region a layer covers — without a floor, every pixel of dead
+-- surface would frost the desktop too, leaving a blurred band across the
+-- top of the screen with nothing over it. 0.2 is the threshold
+-- decoration:blur:popups_ignorealpha ships with, and the lowest alpha the
+-- panel fill can reach is 0.55 ("Panel transparency" tops out at 45%
+-- clear), so real panel pixels always frost and empty surface never does.
+-- 2026-10-09: decoration:blur:enabled now defaults OFF (appearance.lua
+-- explains — at Panel transparency 0 the frost is invisible work that
+-- pegged the iGPU), so this rule is the recipe for when someone raises
+-- transparency, not a live cost. Flip Settings ▸ Appearance ▸ Blur
+-- effects to bring the bar frost back.
+hl.layer_rule({
+	name = "qs-glass",
+	match = { namespace = "^(quickshell|aether-picker)$" },
+	blur = true,
+	-- The three PopupWindows (tray, control center advanced, settings)
+	-- are xdg_popups of the bar's surface, not surfaces of their own —
+	-- hyprctl layers never lists them, and without this they'd render
+	-- sharp on top of a frosted bar. Same reason decoration:blur:popups
+	-- is on above.
+	blur_popups = true,
+	ignore_alpha = 0.2,
 })

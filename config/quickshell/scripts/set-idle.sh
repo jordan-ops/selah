@@ -1,21 +1,23 @@
 #!/bin/sh
 # Idle timeout store for the settings app — ~/.config/omarchy/shell.json
-# ("idle": { "screensaver": 150, "lock": 300 }).
+# ("idle": { "screensaver": 150, "lock": 300, "sleep": 1800 }).
 #
 # There is no jq on this box, so python3 does the JSON edit: temp file in
 # the same directory, then rename (atomic), indent 2 so the diff against
-# the untouched keys stays one line. The screensaver and lock services
-# watch the same file with FileView, so a set lands live — no reload.
+# the untouched keys stays one line. The screensaver, lock and sleep
+# services watch the same file with FileView, so a set lands live — no
+# reload. sleep accepts 0 ("Never" chip); screensaver and lock treat 0
+# as unset and keep their defaults.
 set -u
 
-usage() { echo "Usage: set-idle.sh get|set <screensaver|lock> [seconds]" >&2; exit 2; }
+usage() { echo "Usage: set-idle.sh get|set <screensaver|lock|sleep> [seconds]" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 MODE=$1
 KEY=$2
 F="$HOME/.config/omarchy/shell.json"
 
 case "$KEY" in
-  screensaver|lock) ;;
+  screensaver|lock|sleep) ;;
   *) echo "refusing key: $KEY" >&2; exit 1 ;;
 esac
 

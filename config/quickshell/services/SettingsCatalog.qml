@@ -143,6 +143,12 @@ Singleton {
           description: "Show the % number in the battery ring's top gap",
           keywords: "battery percent ring number text status wifi charge" },
 
+        { id: "barFloating", page: "bar", type: "switch",
+          key: "bar.floating",
+          label: "Floating pill",
+          description: "Suspend the pill below the top edge instead of flush on it",
+          keywords: "bar pill float floating suspended gap island top margin edge" },
+
         // ————————————————— Bar (omasettings §2, appended) —————————————————
         { id: "barTransparent", page: "bar", type: "action",
           command: ["omarchy", "bar", "transparent", "toggle"],
@@ -272,6 +278,62 @@ Singleton {
                      { value: 30, label: "30%" },
                      { value: 45, label: "45%" } ],
           keywords: "transparency transparent alpha panel pill bar control center settings glass see through" },
+
+        // ————————————————— Blur (shell + window frosting) —————————————————
+        // appearance.lua ships the glass recipe — size 8, passes 3,
+        // popups on, vibrancy 0.1696, tuned to the lockscreen's frost —
+        // so these rows OPEN on those numbers until one is moved. Each is
+        // a live Hyprland option: read with hyprctl getoption, committed
+        // with hyprctl eval, recorded under persistKey so the start-of-
+        // session reapply keeps it across restarts; Apply additionally
+        // mirrors it into user-settings.lua.
+        // One split to know about (probe-verified): eval reaches WINDOWS
+        // immediately, but the shell's frost — the qs-glass layer rule —
+        // reads the config files, so it catches up on a reload, never on
+        // eval alone. Hence the reload row at the end: Apply, then click
+        // it once and the bar, panels and popups frost at the new values.
+        { id: "apSectionBlur", page: "appearance", type: "section",
+          label: "Blur" },
+
+        { id: "apBlurOn", page: "appearance", type: "hyprswitch",
+          hyprKey: "decoration:blur:enabled", persistKey: "hypr.blurEnabled",
+          label: "Blur effects",
+          description: "Master switch · windows change at once, the shell's glass on the next reload (decoration:blur:enabled)",
+          keywords: "blur frosted glass effect enable disable on off gaming performance fps" },
+
+        { id: "apBlurSize", page: "appearance", type: "slider",
+          hyprKey: "decoration:blur:size", persistKey: "hypr.blurSize",
+          min: 1, max: 16, step: 1, suffix: "px",
+          label: "Blur size",
+          description: "Radius of the frost — 8 is the lockscreen's strength (decoration:blur:size)",
+          keywords: "blur size radius strength soft hard heavy frosted lockscreen glass" },
+
+        { id: "apBlurPasses", page: "appearance", type: "slider",
+          hyprKey: "decoration:blur:passes", persistKey: "hypr.blurPasses",
+          min: 1, max: 5, step: 1,
+          label: "Blur passes",
+          description: "Blurs the blur again — 3 smears far past 1, costs a little GPU (decoration:blur:passes)",
+          keywords: "blur passes pass smear smear quality gpu performance heavy soft" },
+
+        { id: "apBlurPopups", page: "appearance", type: "hyprswitch",
+          hyprKey: "decoration:blur:popups", persistKey: "hypr.blurPopups",
+          label: "Blur popups",
+          description: "Frost xdg popups too — tray menu, control center panels, this window (decoration:blur:popups)",
+          keywords: "popup popups menu tray dropdown panel frost blur glass" },
+
+        { id: "apBlurVibrancy", page: "appearance", type: "slider",
+          hyprKey: "decoration:blur:vibrancy", persistKey: "hypr.blurVibrancy",
+          min: 0, max: 1, step: 0.01,
+          label: "Blur vibrancy",
+          description: "How much colour bleeds back into the frosted area (decoration:blur:vibrancy)",
+          keywords: "vibrancy vibrance colour color tint saturation vivid bright blur" },
+
+        { id: "apBlurReload", page: "appearance", type: "action",
+          command: ["qs", "ipc", "call", "settingsapp", "reload"],
+          verb: "Reload",
+          label: "Reload Hyprland",
+          description: "After Apply — re-reads the config so the shell's glass frosts at the new values (windows already changed live)",
+          keywords: "reload refresh restart config shell glass apply blur catch up" },
 
         // ————————————————— Desktop clock (giant time widget) ————————————————
         // Off until turned on. The widget is drag/resize-able on the
@@ -597,6 +659,24 @@ Singleton {
           label: "Lock after",
           description: "Idle time before the session locks (the Super+L path) · applies live",
           keywords: "idle lock timeout seconds minutes shell.json session" },
+        { id: "lkSleepAfter", page: "lock", type: "buttons",
+          readCommand: [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "sleep"],
+          options: [
+            { label: "Never", value: 0,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "0"] },
+            { label: "15 min", value: 900,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "900"] },
+            { label: "30 min", value: 1800,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "1800"] },
+            { label: "45 min", value: 2700,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "2700"] },
+            { label: "60 min", value: 3600,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "3600"] },
+            { label: "2 hours", value: 7200,
+              command: [Quickshell.shellDir + "/scripts/set-idle.sh", "set", "sleep", "7200"] } ],
+          label: "Sleep after",
+          description: "Idle time before the machine locks (if not already) and suspends to RAM · applies live",
+          keywords: "idle sleep suspend snooze hibernate power save timeout seconds minutes never ram" },
 
         // ————————————————— Login screen (SDDM greeter) —————————————————
         { id: "lkSectionLogin", page: "lock", type: "section",

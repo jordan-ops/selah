@@ -16,6 +16,12 @@ import QtQuick
 //   both        → same null sink + an extra loopback from @DEFAULT_SOURCE@
 //                 (mic) into it, so both end up mixed on one monitor
 // The null sink is torn down after every recording, saved or discarded.
+//
+// Compression (the card's Compress toggle, on by default):
+//   a stopped recording is re-encoded by ffmpeg (h264 crf 23) in place of
+//   the near-lossless original — "Processing image" fires when it starts,
+//   "Video saved" when the compressed file has replaced the raw one. The
+//   raw file survives untouched whenever the encode fails.
 Singleton {
     id: root
 
@@ -43,6 +49,14 @@ Singleton {
     }
     function toggleMic() { root.audioMic = !root.audioMic }
     function toggleSystem() { root.audioSystem = !root.audioSystem }
+
+    // Compress the file AFTER the recording stops (see the post-processing
+    // block below). The value lives in settings.json so it survives a
+    // shell reload, and the card's toggle writes it back through set().
+    readonly property bool compress: Settings.recordingCompress
+    function toggleCompress() {
+        Settings.set("recording.compress", !root.compress)
+    }
 
     property bool open: false
     // Multi-monitor: overlay state is shared, but every screen has its own
@@ -102,6 +116,16 @@ Singleton {
     property bool _discarding: false
     property bool _stopRequested: false
     property bool _waitingForRecorderStart: false
+
+    // ── Post-processing state ─────────────────────────────────────────
+    // `processing` drives the card's status line while ffmpeg runs. Jobs
+    // queue so a second recording stopped before the first re-encode
+    // finished is compressed too, never silently skipped — Process can
+    // only own one ffmpeg at a time.
+    property bool processing: false
+    property var _compressQueue: []
+    property string _compressSource: ""
+    property string _compressTemp: ""
 
     // Output is deliberately created on demand. wf-recorder does not create
     // parent directories, and the configured video directory may not exist yet.
@@ -492,6 +516,10 @@ Singleton {
             deleteProc.running = true
         } else if (intentional || exitCode === 0) {
             root.lastFile = file
+            if (root.compress && file !== "")
+                root._startCompression(file)
+            else if (file !== "")
+                Quickshell.execDetached(["notify-send", "Video saved", file])
         } else {
             const detail = recorderProc._lastOutput
             root.lastError = "wf-recorder failed (exit " + exitCode + ")"
@@ -505,6 +533,120 @@ Singleton {
     }
 
     Process { id: deleteProc }
+
+    // ── Post-processing: optional compression ─────────────────────────
+    // wf-recorder's default is near-lossless x264, which is why the files
+    // came out huge. With Compress on, the stop path above hands the fresh
+    // file here: ffmpeg re-encodes to a temp file beside it, and only a
+    // clean encode followed by a rename replaces the original — any
+    // failure deletes the temp and leaves the uncompressed recording as
+    // the saved file.
+    function _startCompression(source) {
+        root._compressQueue = root._compressQueue.concat([{
+            source: source,
+            temp: source + ".compressing.mp4"
+        }])
+        root._pumpCompression()
+    }
+
+    function _pumpCompression() {
+        if (root.processing || root._compressQueue.length === 0) return
+        const job = root._compressQueue[0]
+        root._compressQueue = root._compressQueue.slice(1)
+        root._compressSource = job.source
+        root._compressTemp = job.temp
+        root.processing = true
+
+        // Exactly the words asked for; the shell's own NotificationServer
+        // puts it in the pill, same transport as Battery/Updates' calls.
+        Quickshell.execDetached(["notify-send", "Processing image"])
+
+        compressProc._lastOutput = ""
+        // -nostdin so ffmpeg can never stall on input Process won't send;
+        // crf 23 keeps text crisp while shedding most of the bulk.
+        compressProc.command = [
+            "ffmpeg", "-nostdin", "-y",
+            "-i", job.source,
+            "-c:v", "libx264", "-crf", "23", "-preset", "veryfast",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            job.temp
+        ]
+        compressProc.running = true
+    }
+
+    function _compressionDone() {
+        const source = root._compressSource
+        root.processing = false
+        root._compressSource = ""
+        root._compressTemp = ""
+        root.lastFile = source
+        Quickshell.execDetached(["notify-send", "Video saved", source])
+        root._pumpCompression()
+    }
+
+    function _compressionFailed(detail) {
+        const source = root._compressSource
+        const temp = root._compressTemp
+        root.processing = false
+        root._compressSource = ""
+        root._compressTemp = ""
+        if (temp !== "") {
+            cleanupProc.command = ["rm", "-f", temp]
+            cleanupProc.running = true
+        }
+        // the original was never touched — it stays the saved recording
+        root.lastFile = source
+        root.lastError = "Compression failed: " + detail
+        console.warn(root.lastError)
+        Quickshell.execDetached(["notify-send", "-u", "critical",
+            "Compression failed", source])
+        root._pumpCompression()
+    }
+
+    Process {
+        id: compressProc
+        property string _lastOutput: ""
+
+        onExited: exitCode => {
+            if (exitCode === 0) {
+                moveProc.command = ["mv", "-f",
+                    root._compressTemp, root._compressSource]
+                moveProc.running = true
+            } else {
+                root._compressionFailed("ffmpeg exited " + exitCode
+                    + (compressProc._lastOutput !== ""
+                        ? ": " + compressProc._lastOutput : ""))
+            }
+        }
+        stderr: SplitParser {
+            onRead: line => {
+                const text = line.trim()
+                if (text === "") return
+                // ffmpeg interleaves its \r progress dumps into the SAME
+                // chunk as the real message, so keep only what follows the
+                // last \r and skip a chunk that is pure progress — then
+                // cap it so one message can't blow up the status line.
+                const tail = text.split("\r").pop().trim()
+                if (tail === "" || tail.startsWith("frame=")) return
+                compressProc._lastOutput = tail.slice(-300)
+            }
+        }
+    }
+
+    // The rename is what actually swaps the compressed file in — its own
+    // step so a failed encode can never half-overwrite the recording.
+    Process {
+        id: moveProc
+        onExited: exitCode => {
+            if (exitCode === 0)
+                root._compressionDone()
+            else
+                root._compressionFailed("could not move the compressed file into place")
+        }
+    }
+
+    Process { id: cleanupProc }
 
     // wf-recorder needs SIGINT (not a hard kill) to finalize the container
     // and write a playable file. Quickshell's Process.signal targets only this
@@ -564,15 +706,21 @@ Singleton {
             root.audioMic = mic
             root.audioSystem = system
         }
+        function setCompress(compress: bool): void {
+            Settings.set("recording.compress", compress)
+        }
+        function toggleCompress(): void { root.toggleCompress() }
         function open(): void { root.openPanel() }
         function close(): void { root.open = false }
         function status(): string {
             return JSON.stringify({
                 recording: root.recording,
                 starting: root.starting,
+                processing: root.processing,
                 target: root.captureTarget,
                 mic: root.audioMic,
                 system: root.audioSystem,
+                compress: root.compress,
                 file: root.lastFile,
                 error: root.lastError
             })
