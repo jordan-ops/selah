@@ -3,7 +3,8 @@
 My Arch + Hyprland desktop, in one repo: a **quickshell** shell with a
 wallhaven-aware wallpaper/palette picker (built on [aether]), an
 **AstroVim** config carrying the same palette, and the hyprland / kitty /
-foot / GTK / fontconfig glue that keeps every app on the same colours.
+foot / GTK / fontconfig glue — down to Firefox's profile chrome and the
+Yaru folder icons — that keeps every app on the same colours.
 
 Run one script and the whole desktop appears.
 
@@ -33,7 +34,7 @@ Run one script and the whole desktop appears.
 ├── local/bin/              # → ~/.local/bin (aspect-fit.sh, screenshot.sh, xunhide, ...)
 ├── local/share/            # → ~/.local/share (SDDM staged theme + Ctrl+D video downloader)
 ├── wallpapers/             # → ~/Wallpapers (real files; theme links are rebuilt)
-└── state/quickshell/       # settings + current font/theme/gtk, seeded on first run
+└── state/quickshell/       # settings + current font/theme/gtk + firefox install hash, seeded on first run
 ```
 
 Roughly **173 MB / 701 files** — almost all of it is theme wallpapers.
@@ -120,7 +121,7 @@ The shell does most of this itself; these are the manual escape hatches.
 ```bash
 cd ~/.config/quickshell
 
-scripts/switch-theme.sh <name>     # apply a theme: shell + hypr + kitty + GTK + wallpaper
+scripts/switch-theme.sh <name>     # apply a theme: shell + hypr + kitty + GTK + Firefox + folders + wallpaper
 scripts/set-font.sh "<family>"     # fontconfig + gsettings + GTK + kitty, live (45 ms)
 scripts/set-text-size.sh 13        # same story for size
 scripts/seed-wallpapers.sh         # rebuild ~/Wallpapers links from theme backgrounds
@@ -155,6 +156,7 @@ Written for one machine, so a few things assume this user and hardware:
 | `monitors.lua` | `1920x1080@60.06Hz` on `output = ""` |
 | `autostart.lua` | starts `megasync` (your backups) |
 | `~/.local/bin` | deliberately not on `PATH` — hyprland binds call those by full path |
+| `state/quickshell/firefox-install-hash` | Firefox claims its default profile against the install path, so the seeded hash (`4F96D1932A9F858E` = `/usr/lib/firefox`) only fits that layout. Install Firefox elsewhere and the claim self-heals: the first launch writes the real hash into `profiles.ini`, and the next theme apply remembers it in `~/.local/state/quickshell/firefox-install-hash`. |
 
 Everything else (shell, themes, fonts, terminals, hyprland) is user-agnostic.
 

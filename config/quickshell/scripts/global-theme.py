@@ -9,6 +9,12 @@ Ports the user-session half of omarchy's post-theme hooks to switch-theme.sh:
   * kitty.conf.tpl            -> generated current-theme.conf (+ include shim)
   * omarchy-theme-set-browser -> staged browser-color.json + best-effort push
                                  to /etc/chromium/policies/managed/color.json
+  * firefox                   -> profile userChrome.css + userContent.css and
+                                 the three prefs that switch them on (no policy
+                                 hook exists for Gecko, so this is profile-level)
+  * yaru folders              -> ~/.local/share/icons/quickshell-folders, an
+                                 icon theme inheriting the theme's Yaru variant
+                                 whose folder art is tinted to its accent
 
 Everything user-session runs directly; the /etc policy write tries a direct
 write, then `sudo -n` (the passwordless helper one-time-root-setup.sh installs),
@@ -18,6 +24,7 @@ on the next run after setup.
 Usage: global-theme.py <theme-dir> [--dry-run]
 """
 
+import colorsys
 import json
 import os
 import pathlib
@@ -28,6 +35,14 @@ import sys
 import tempfile
 import tomllib
 
+# Pillow only backs the Yaru folder tint; everything else in the retint is
+# text in/text out, so a box without it degrades to "no folder colours"
+# instead of failing the switch.
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover
+    Image = None
+
 HOME = pathlib.Path.home()
 STATE = HOME / ".local/state/quickshell/generated"
 # The user's sticky GTK choice, recorded so it survives a machine that has
@@ -35,6 +50,18 @@ STATE = HOME / ".local/state/quickshell/generated"
 GTK_STATE = HOME / ".local/state/quickshell/current-gtk-theme"
 POLICY_DEST = pathlib.Path("/etc/chromium/policies/managed/color.json")
 BROWSER_HELPER = "/usr/local/bin/set-browser-color"
+
+# Firefox has no /etc policy to push colours through, so everything lives in
+# the profile instead. The Install<hash> section is how modern Firefox (67+)
+# picks the default profile for a given install: without it Firefox ignores a
+# hand-written profiles.ini and mints its own profile on first run. The hash
+# is a function of the install path (proven: same path -> same hash across
+# HOMEs, /tmp copy at another path -> different hash), so it is *discovered*
+# from installs.ini whenever Firefox has already run, and read from this state
+# seed only for the never-launched case.
+FF_DIR = HOME / ".mozilla/firefox"
+FF_STATE = HOME / ".local/state/quickshell/firefox-install-hash"
+FF_PROFILE = "selah.default-release"   # our profile when we have to seed one
 
 DRY = "--dry-run" in sys.argv
 
@@ -406,6 +433,663 @@ def apply_chromium(p: dict):
         log("chromium", "refreshed running instance")
 
 
+# ----------------------------------------------------------------- firefox ---
+
+def ini_sections(text: str) -> dict:
+    """profiles.ini / installs.ini -> {section: {key: value}}.
+
+    Both are flat INIs written by Firefox itself (no quoting, no nesting), so
+    a 15-line parse beats pulling in configparser — which would also choke on
+    the section names Firefox uses as bare words."""
+    sections, current = {}, None
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s[0] in ";#":
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            current = s[1:-1]
+            sections.setdefault(current, {})
+        elif current is not None and "=" in s:
+            key, value = s.split("=", 1)
+            sections[current][key.strip()] = value.strip()
+    return sections
+
+
+def firefox_install_hash(sections: dict) -> str:
+    """`4F96D1932A9F858E` out of an `[Install4F96D1932A9F858E]` section, else ""."""
+    for name in sections:
+        if name.startswith("Install") and len(name) > len("Install"):
+            return name[len("Install"):]
+    return ""
+
+
+def firefox_profile():
+    """Resolve the profile Gecko will actually open: (dir, install hash).
+
+    Order mirrors what the browser does: the per-install entry wins (it is
+    written by Firefox itself and is the one thing it refuses to second-guess),
+    then the legacy `Default=1` / `[General] Default=` markers for older
+    layouts, then the only profile when there is exactly one. Returns
+    (None, "") when nothing resolves, which is the seed case below."""
+    if not FF_DIR.is_dir():
+        return None, ""
+
+    for name in ("installs.ini", "profiles.ini"):
+        path = FF_DIR / name
+        if not path.is_file():
+            continue
+        sections = ini_sections(path.read_text(encoding="utf-8", errors="ignore"))
+        for section, kv in sections.items():
+            if section.startswith("Install") and kv.get("Default"):
+                target = kv["Default"]
+                if not kv.get("IsRelative", "1") or pathlib.PurePath(target).is_absolute():
+                    resolved = pathlib.Path(target)
+                else:
+                    resolved = FF_DIR / target
+                return (resolved if resolved.is_dir() else None), firefox_install_hash(sections)
+
+    ini = FF_DIR / "profiles.ini"
+    if not ini.is_file():
+        return None, ""
+    sections = ini_sections(ini.read_text(encoding="utf-8", errors="ignore"))
+    hash_ = firefox_install_hash(sections)
+
+    candidates = []
+    general = sections.get("General", {})
+    if general.get("Default") is not None:
+        candidates.append(f"Profile{general['Default']}")
+    for section, kv in sections.items():
+        if section.startswith("Profile") and kv.get("Default") == "1":
+            candidates.append(section)
+    if not candidates:
+        profiles = [s for s in sections if s.startswith("Profile")]
+        if len(profiles) == 1:
+            candidates = profiles
+    for section in candidates:
+        kv = sections.get(section, {})
+        if kv.get("Path"):
+            resolved = (pathlib.Path(kv["Path"]) if kv.get("IsRelative") == "0"
+                        else FF_DIR / kv["Path"])
+            if resolved.is_dir():
+                return resolved, hash_
+    return None, hash_
+
+
+def firefox_needs_seed() -> bool:
+    """True when Firefox has clearly never run here: no profiles.ini at all,
+    or one that lists no profiles. Anything else belongs to Firefox — this
+    script writes into the profile Gecko chose, it never re-points a profile
+    list it does not understand."""
+    if not FF_DIR.is_dir():
+        return True
+    ini = FF_DIR / "profiles.ini"
+    if not ini.is_file():
+        return True
+    sections = ini_sections(ini.read_text(encoding="utf-8", errors="ignore"))
+    return not any(name.startswith("Profile") for name in sections)
+
+
+def seed_firefox_profile():
+    """First run on a machine Firefox has never opened: make the profile that
+    the desktop will theme, and — when the install hash is known — claim it as
+    this install's default so Gecko opens *it* instead of minting an
+    unthemed `xxxxxxxx.default-release` beside it.
+
+    Without the hash this still writes the profile; Firefox then picks its own
+    and the next switch finds it through installs.ini (self-healing, just one
+    launch late)."""
+    target = FF_DIR / FF_PROFILE
+    if DRY:
+        log("firefox profile", f"seed {target}")
+        return target
+    target.mkdir(parents=True, exist_ok=True)
+
+    ini = FF_DIR / "profiles.ini"
+    existing = ""
+    if ini.is_file():
+        existing = ini.read_text(encoding="utf-8", errors="ignore")
+    body = existing if existing.strip() else "[General]\nVersion=2\n\n[Profile0]\nName=selah\nIsRelative=1\nPath=" + FF_PROFILE + "\nDefault=1\n"
+    if not ini.is_file():
+        write(ini, body)
+
+    hash_ = ""
+    sections = ini_sections(existing) if existing else {}
+    hash_ = firefox_install_hash(sections)
+    if not hash_ and FF_STATE.is_file():
+        hash_ = FF_STATE.read_text(encoding="utf-8").strip()
+    if hash_ and f"[Install{hash_}]" not in body:
+        if not body.endswith("\n"):
+            body += "\n"
+        write(ini, body + f"\n[Install{hash_}]\nDefault={FF_PROFILE}\nLocked=1\n")
+        log("firefox profile", f"claimed as default for install {hash_}")
+    elif not hash_:
+        log("firefox profile", "install hash unknown — Firefox picks the profile on first launch")
+    return target
+
+
+def claim_firefox_install(profile: pathlib.Path) -> bool:
+    """Write the `[Install<hash>]` claim Firefox writes on its own first
+    launch, when the hash came from the seeded state file instead.
+
+    Without it a profiles.ini this script wrote before the hash was known
+    would make Gecko mint an unthemed `xxxxxxxx.default-release` beside the
+    profile we just themed — the same late-by-one-launch heal as the seed
+    path, only without waiting for it. Returns True when something was
+    written."""
+    if not FF_STATE.is_file():
+        return False
+    hash_ = FF_STATE.read_text(encoding="utf-8").strip()
+    if not hash_:
+        return False
+    ini = FF_DIR / "profiles.ini"
+    text = ini.read_text(encoding="utf-8", errors="ignore") if ini.is_file() else ""
+    if f"[Install{hash_}]" in text:
+        return False
+    try:
+        target = profile.relative_to(FF_DIR).as_posix()
+    except ValueError:
+        # a profile Firefox was pointed at elsewhere — its path rules, not ours
+        target = str(profile)
+    body = text
+    if body and not body.endswith("\n"):
+        body += "\n"
+    if body:
+        body += "\n"
+    write(ini, body + f"[Install{hash_}]\nDefault={target}\nLocked=1\n")
+    return True
+
+
+def readable_on(c: str, p: dict) -> str:
+    """Readable ink for a surface of colour c: dark on light, light on dark —
+    the same 382 rgb-sum threshold gtk_color_map's on() uses, so Firefox and
+    GTK agree about what 'on accent' means."""
+    return p["background"] if rgb_sum(c) > 382 else p["bright_foreground"]
+
+
+def firefox_colors(p: dict) -> dict:
+    """The handful of derived surfaces every Firefox rule below is built from.
+
+    Names mirror what the tokens call things (toolbox / toolbar / field / panel
+    / tab) so the generated CSS reads like the file it is overriding. Shades
+    come from the theme's own background/backgrounds keys when it ships them,
+    else from the same mix() ramps the GTK pass uses."""
+    bg, fg, accent = p["background"], p["foreground"], p["accent"]
+    muted = p.get("muted") or fg
+    surface = p.get("lighter_background") or mix(bg, fg, 0.06)
+    deep = p.get("darker_background") or mix(bg, "#000000", 0.25)
+
+    def shade(c: str, amount: float) -> str:
+        # toward white on a dark theme, toward black on a light one — the
+        # accent has to move away from the page in the same direction it sits
+        return mix(c, "#ffffff", amount) if p["mode"] == "dark" else mix(c, "#000000", amount)
+
+    tab_sel = mix(bg, accent, 0.45)
+    return {
+        "bg": bg, "fg": fg, "muted": muted, "accent": accent,
+        "accent_hover": shade(accent, 0.15), "accent_active": shade(accent, 0.30),
+        "on_accent": readable_on(accent, p),
+        "surface": surface, "deep": deep,
+        "border": mix(surface, fg, 0.35),
+        "field": mix(bg, fg, 0.10), "field_focus": mix(bg, fg, 0.16),
+        "panel": surface, "panel_border": mix(surface, fg, 0.35),
+        "list_bg": mix(surface, fg, 0.12),
+        "tab_sel": tab_sel, "tab_sel_fg": readable_on(tab_sel, p),
+        "tab_hover": mix(bg, fg, 0.12), "hover": mix(surface, accent, 0.30),
+        "alt_row": mix(bg, fg, 0.05), "list_hover": mix(bg, accent, 0.25),
+        "mode": p["mode"],
+    }
+
+
+def firefox_chrome_css(p: dict) -> str:
+    """userChrome.css — browser chrome (tab strip, toolbars, panels, sidebar).
+
+    Firefox 157 colours itself from design-system *tokens*; the Proton names
+    every userChrome theme used to override (--toolbar-bgcolor,
+    --tab-selected-bgcolor, --arrowpanel-background) are gone, so this file
+    targets the tokens that replaced them, verified against this build's own
+    omni.ja. `!important` throughout: userChrome.css is a user-origin sheet and
+    user !important beats the browser's author !important (layer order never
+    gets a vote once origin+importance have sorted first)."""
+    c = firefox_colors(p)
+    sections = [
+        ("accent — focus rings, hover mixes, selected everything", [
+            ("color-accent-primary", c["accent"]),
+            ("color-accent-primary-hover", c["accent_hover"]),
+            ("color-accent-primary-active", c["accent_active"]),
+            ("color-accent-primary-selected", c["accent"]),
+            ("focus-outline-color", c["accent"]),
+        ]),
+        ("toolbox + toolbars — the box behind tabs and the nav bar", [
+            ("toolbox-background-color", c["surface"]),
+            ("toolbox-background-color-inactive", c["surface"]),
+            ("toolbox-text-color", c["fg"]),
+            ("toolbox-text-color-inactive", c["muted"]),
+            ("toolbar-background-color", c["bg"]),
+            ("toolbar-text-color", c["fg"]),
+            ("toolbar-border", c["border"]),
+            ("toolbarbutton-icon-fill", c["fg"]),
+            ("toolbarbutton-background-color-hover", c["hover"]),
+        ]),
+        ("tabs", [
+            ("tab-background-color-hover", c["tab_hover"]),
+            ("tab-background-color-selected", c["tab_sel"]),
+            ("tab-text-color", c["fg"]),
+            ("tab-text-color-hover", c["fg"]),
+            ("tab-text-color-selected", c["tab_sel_fg"]),
+            ("tab-border-color", c["accent"]),
+        ]),
+        ("urlbar + toolbar fields", [
+            ("toolbar-field-background-color", c["field"]),
+            ("toolbar-field-background-color-focus", c["field_focus"]),
+            ("toolbar-field-text-color", c["fg"]),
+            ("toolbar-field-text-color-focus", c["fg"]),
+            ("toolbar-field-border-color", c["border"]),
+            ("urlbar-background-color", c["field"]),
+            ("urlbar-background-color-focus", c["field_focus"]),
+            ("urlbar-box-background-color", c["field_focus"]),
+            ("input-text-background-color", c["field"]),
+        ]),
+        ("panels — hamburger menu, dropdowns, the urlbar result list", [
+            ("panel-background-color", c["panel"]),
+            ("panel-border-color", c["panel_border"]),
+            ("panel-list-background-color", c["list_bg"]),
+            ("panel-list-text-color", c["fg"]),
+        ]),
+        ("buttons", [
+            ("button-background-color-primary", c["accent"]),
+            ("button-background-color-primary-hover", c["accent_hover"]),
+            ("button-background-color-primary-active", c["accent_active"]),
+            ("button-background-color-primary-selected", c["accent"]),
+            ("button-text-color-primary", c["on_accent"]),
+        ]),
+        ("sidebar", [
+            ("sidebar-background-color", c["deep"]),
+            ("sidebar-text-color", c["fg"]),
+        ]),
+        ("lwtheme plumbing — only read when an extension theme is installed", [
+            ("lwt-accent-color", c["bg"]),
+            ("lwt-text-color", c["fg"]),
+        ]),
+    ]
+
+    lines = []
+    for title, tokens in sections:
+        lines.append(f"  /* {title} */")
+        lines += [f"  --{name}: {value} !important;" for name, value in tokens]
+        lines.append("")
+
+    # Element-level safety net: a build that reads a token this file has not
+    # heard of still paints the chrome box, the urlbar and the selected tab
+    # with our colours instead of falling back to the system theme.
+    net = f"""  /* safety net for anything the tokens above do not reach */
+  #navigator-toolbox, #nav-bar {{
+    background-color: {c['surface']} !important;
+    color: {c['fg']} !important;
+  }}
+  #urlbar, #urlbar-input-container, #searchbar {{
+    background-color: {c['field']} !important;
+    color: {c['fg']} !important;
+  }}
+  .tabbrowser-tab[selected] .tab-background {{
+    background-color: {c['tab_sel']} !important;
+  }}"""
+
+    return f"""/* quickshell theme: {THEME_DIR.name} (generated by global-theme.py — do not edit)
+ *
+ * Firefox 157+ palette, written as the design-system tokens the browser reads.
+ * Restart Firefox to pick it up: Gecko loads these once at startup (user.js
+ * prefs too), there is no live-reload hook the way kitty has `@ set-colors`.
+ */
+:root {{
+  color-scheme: {c['mode']} !important;
+
+{chr(10).join(lines).rstrip()}
+{net}
+}}
+"""
+
+
+def firefox_content_css(p: dict) -> str:
+    """userContent.css — about: pages (preferences, config, new tab).
+
+    Scoped with @-moz-document (a user-sheet-only at-rule) so none of these
+    names can ever land on a website's :root; the properties are Mozilla's
+    own, but color-scheme definitely is not something to impose on the web."""
+    c = firefox_colors(p)
+    tokens = [
+        ("background-color-canvas", c["bg"]),
+        ("background-color-box", c["surface"]),
+        ("background-color-box-info", c["list_bg"]),
+        ("background-color-list-item-hover", c["list_hover"]),
+        ("table-row-background-color-alternate", c["alt_row"]),
+        ("text-color", c["fg"]),
+        ("text-color-deemphasized", c["muted"]),
+        ("heading-text-color", c["accent"]),
+        ("border-color", c["border"]),
+        ("border-color-deemphasized", c["list_bg"]),
+        ("color-accent-primary", c["accent"]),
+        ("color-accent-primary-hover", c["accent_hover"]),
+        ("color-accent-primary-active", c["accent_active"]),
+        ("focus-outline-color", c["accent"]),
+        ("link-color", c["accent"]),
+        ("link-color-hover", c["accent_hover"]),
+        ("link-color-active", c["accent_active"]),
+        ("button-background-color-primary", c["accent"]),
+        ("button-background-color-primary-hover", c["accent_hover"]),
+        ("button-background-color-primary-active", c["accent_active"]),
+        ("button-text-color-primary", c["on_accent"]),
+    ]
+    body = "\n".join(f"    --{name}: {value} !important;" for name, value in tokens)
+    return f"""/* quickshell theme: {THEME_DIR.name} (generated by global-theme.py — do not edit)
+ *
+ * about: pages only — @-moz-document keeps this off every website's :root.
+ */
+@-moz-document url-prefix("about:"), url-prefix("chrome://") {{
+  :root {{
+    color-scheme: {c['mode']} !important;
+{body}
+  }}
+}}
+"""
+
+
+def firefox_prefs(p: dict) -> dict:
+    """user.js entries: turn the stylesheets on, and put the content colour
+    scheme where the theme's mode says it goes (0 dark / 1 light / 2 system —
+    verified against this build's ext-browserSettings.js)."""
+    dark = p["mode"] == "dark"
+    return {
+        # off by default — without it Gecko silently ignores userChrome.css
+        "toolkit.legacyUserProfileCustomizations.stylesheets": "true",
+        # GTK normally feeds this one from the desktop; ours wins while it is
+        # set and self-heals to GTK afterwards (Firefox clears it itself)
+        "ui.systemUsesDarkTheme": "1" if dark else "0",
+        "layout.css.prefers-color-scheme.content-override": "0" if dark else "1",
+    }
+
+
+def apply_firefox(p: dict):
+    """Profile-level theming: userChrome.css + userContent.css carry the
+    palette, user.js flips the stylesheet pref and the colour-scheme prefs.
+
+    Chromium gets a live refresh (--refresh-platform-policy); Gecko has no
+    equivalent, so a running browser keeps its old colours until the next
+    start and we say so in the log instead of pretending otherwise."""
+    if not FF_DIR.is_dir() and not shutil.which("firefox"):
+        log("firefox", "not installed — skipping")
+        return
+
+    profile, hash_ = firefox_profile()
+    if profile is None:
+        if not firefox_needs_seed():
+            log("firefox", "no profile this script understands — "
+                           "launch Firefox once, then re-apply")
+            return
+        profile = seed_firefox_profile()
+    elif not hash_ and not DRY and claim_firefox_install(profile):
+        log("firefox profile", "claimed as default for install "
+                               + FF_STATE.read_text(encoding="utf-8").strip())
+    if hash_ and not FF_STATE.is_file() and not DRY:
+        # remember what Firefox told us: a reinstall at another path rewrites
+        # it, a fresh clone still has this machine's answer
+        FF_STATE.parent.mkdir(parents=True, exist_ok=True)
+        FF_STATE.write_text(hash_ + "\n", encoding="utf-8")
+
+    write(profile / "chrome/userChrome.css", firefox_chrome_css(p))
+    write(profile / "chrome/userContent.css", firefox_content_css(p))
+
+    prefs = firefox_prefs(p)
+    user_js = profile / "user.js"
+    existing = user_js.read_text(encoding="utf-8") if user_js.is_file() else ""
+    out, applied = [], set()
+    for line in existing.splitlines():
+        m = re.match(r'\s*user_pref\(\s*"([^"]+)"\s*,', line)
+        if m and m.group(1) in prefs:
+            if m.group(1) not in applied:
+                out.append(f'user_pref("{m.group(1)}", {prefs[m.group(1)]});')
+                applied.add(m.group(1))
+        else:
+            out.append(line)          # the user's own prefs are never touched
+    for key, value in prefs.items():
+        if key not in applied:
+            out.append(f'user_pref("{key}", {value});')
+    write(user_js, "\n".join(out) + "\n")
+
+    running = subprocess.run(["pgrep", "-x", "firefox"], capture_output=True).returncode == 0
+    note = " — restart Firefox to recolour" if running else ""
+    log("firefox", f"{profile}{note}")
+
+
+# ------------------------------------------------------ yaru folder colours ---
+
+FOLDERS_NAME = "quickshell-folders"
+FOLDERS_DIR = HOME / ".local/share/icons/quickshell-folders"
+FOLDERS_STAMP = STATE / "folders.stamp"
+
+
+def icon_theme_dir(name: str):
+    """Directory of an installed icon theme — user themes first, since the
+    overlay this builds lives there rather than in /usr/share/icons."""
+    if not name:
+        return None
+    for root in (HOME / ".local/share/icons", pathlib.Path("/usr/share/icons")):
+        d = root / name
+        if (d / "index.theme").is_file():
+            return d
+    return None
+
+
+def icon_theme_inherits(d: pathlib.Path) -> str:
+    """First name out of the theme's Inherits= line (our own overlay, when it
+    is the active theme, records its base there)."""
+    try:
+        for line in (d / "index.theme").read_text(encoding="utf-8").splitlines():
+            if line.startswith("Inherits="):
+                return line.split("=", 1)[1].split(",")[0].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def current_icon_theme() -> str:
+    """The icon theme the desktop is wearing right now — the same
+    read-before-write dance as current_gtk_theme, because gsettings answers
+    with a *default* for a key nobody ever set and that answer must not be
+    mistaken for a choice."""
+    session = bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS"))
+    if session and shutil.which("dconf"):
+        r = subprocess.run(["dconf", "read", "/org/gnome/desktop/interface/icon-theme"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            val = r.stdout.strip().strip("'\"")
+            if val:
+                return val
+    elif session and shutil.which("gsettings"):
+        r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            val = r.stdout.strip().strip("'\"")
+            if val and val not in ("Adwaita", "Default"):
+                return val
+    return ""
+
+
+def folder_base_theme(declared: str):
+    """(name, dir) of the icon theme the folders get tinted on top of.
+
+    The theme's own icons.theme wins, so every non-folder icon keeps exactly
+    the Yaru variant that theme asked for and only `places/` changes hands.
+    Failing that: whatever the desktop already wears, then the Yaru-blue/stock
+    Yaru pair switch-theme has always fallen back to."""
+    names = [declared, current_icon_theme(), FOLDERS_NAME, "Yaru-blue", "Yaru"]
+    seen = set()
+    for name in names:
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        d = icon_theme_dir(name)
+        if name == FOLDERS_NAME:
+            # we are the active overlay already — rebase on the base it names
+            name = icon_theme_inherits(d)
+            if not name or name in seen:
+                continue
+            d = icon_theme_dir(name)
+        if d:
+            return name, d
+    return "", None
+
+
+def folder_icon_sources(base: pathlib.Path) -> dict:
+    """rel path -> source png for every folder icon the base ships.
+
+    Every context, not just places/: `actions/folder-new` and
+    `status/folder-drag-accept` are folder drawings too and would otherwise
+    keep the old colour next to the tinted ones. The only thing filtered is
+    the name (folder* / inode-directory) and the format — Yaru draws folders
+    as raster at every size, and the SVGs under places/ are the *-symbolic
+    ones, which are meant to follow the text colour rather than the accent.
+    Stock Yaru is the second root because variants ship only some of the sizes
+    and inherit the rest from it."""
+    roots = [base]
+    yaru = pathlib.Path("/usr/share/icons/Yaru")
+    if base != yaru:
+        roots.append(yaru)
+    sources = {}
+    for root in roots:
+        for src in sorted(root.glob("*/*/*.png")):
+            if src.name.startswith("folder") or src.name == "inode-directory.png":
+                sources.setdefault(src.relative_to(root).as_posix(), src)
+    return sources
+
+
+def dominant_color(path) -> tuple:
+    """Most common opaque colour in an icon — Yaru's folder art is flat enough
+    that this is the folder's actual fill (base Yaru: #da5b2a)."""
+    im = Image.open(path).convert("RGBA")
+    colors = im.getcolors(maxcolors=1_000_000) or []
+    opaque = [(n, c[:3]) for n, c in colors if c[3] > 200]
+    if not opaque:
+        return None
+    return max(opaque, key=lambda item: item[0])[1]
+
+
+def tint_folder(src, dst, ref: tuple, target: tuple):
+    """Recolour one folder PNG to `target`, keeping Yaru's own shading.
+
+    Hue moves to the target; saturation and value scale by the
+    target:source ratio so the dark edge stays the dark edge and a folder that
+    ships a shade darker (folder-open) keeps that relationship. Pixels with
+    almost no saturation are skipped — those are the highlights and the white
+    paper on folder-documents, and dragging them along is what makes a naive
+    hue shift look like a filter."""
+    im = Image.open(src).convert("RGBA")
+    alpha = im.getchannel("A")
+    hue, sat, val = im.convert("RGB").convert("HSV").split()
+
+    ref_h, ref_s, ref_v = colorsys.rgb_to_hsv(*(n / 255 for n in ref))
+    tgt_h, tgt_s, tgt_v = colorsys.rgb_to_hsv(*(n / 255 for n in target))
+    s_ratio = (tgt_s / ref_s) if ref_s > 0.05 else 1.0
+    v_ratio = (tgt_v / ref_v) if ref_v > 0.05 else 1.0
+    keep = sat.point(lambda x: 255 if x >= 32 else 0)
+
+    hue2 = Image.composite(Image.new("L", im.size, round(tgt_h * 255)), hue, keep)
+    sat2 = sat.point(lambda x: min(255, round(x * s_ratio)))
+    val2 = Image.composite(val.point(lambda x: min(255, round(x * v_ratio))), val, keep)
+
+    out = Image.merge("HSV", (hue2, sat2, val2)).convert("RGB").convert("RGBA")
+    out.putalpha(alpha)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    out.save(dst, "PNG")
+
+
+def folders_index(base_name: str, rels) -> str:
+    """index.theme for the overlay: inherits everything it does not ship, and
+    declares only the dirs it actually contains — the entries are size/context
+    paths (`48x48/places`), the same spelling Yaru uses, because GTK joins a
+    Directories entry straight onto the theme dir and a bare `48x48` would
+    point at a directory whose icons live one level deeper (they get ignored,
+    and the whole tint silently falls back to the base)."""
+    dirs = sorted({"/".join(rel.split("/")[:2]) for rel in rels if rel.count("/") >= 2})
+    contexts = {"places": "Places", "actions": "Actions", "status": "Status"}
+    lines = [
+        "[Icon Theme]",
+        "Name=Quickshell folders",
+        f"Comment=Yaru folders tinted to the {THEME_DIR.name} accent",
+        f"Inherits={base_name}",
+        "Example=folder",
+        "Directories=" + ",".join(dirs),
+        "",
+    ]
+    for d in dirs:
+        size_dir, context = d.split("/", 1)
+        m = re.match(r"(\d+)x(\d+)(@2x)?", size_dir)
+        if not m:
+            continue
+        lines += [f"[{d}]", f"Context={contexts.get(context, 'Places')}",
+                  f"Size={m.group(1)}"]
+        if m.group(3):
+            lines.append("Scale=2")
+        lines += ["Type=Fixed", ""]
+    return "\n".join(lines) + "\n"
+
+
+def apply_folders(p: dict, declared: str) -> str:
+    """Build the accent-tinted folder overlay and return the icon theme name to
+    apply — "" when it cannot run, so the caller falls back to the plain
+    variant exactly as this script did before folders were a thing here.
+
+    Yaru's colour variants (Yaru-sage, Yaru-magenta, …) differ only in folder
+    colour, which means a theme's folders were tied to whichever variant its
+    icons.theme named — or to a stale one when the theme named none. Deriving
+    from the accent instead means every wallpaper-generated theme gets folders
+    that match it, with Ubuntu's own folder art doing the drawing."""
+    if Image is None:
+        log("yaru folders", "Pillow missing — keeping the plain icon theme")
+        return ""
+    base_name, base_dir = folder_base_theme(declared)
+    if base_dir is None:
+        log("yaru folders", "no icon theme installed to tint folders from")
+        return ""
+
+    sources = folder_icon_sources(base_dir)
+    if not sources:
+        log("yaru folders", f"{base_name} ships no folder icons")
+        return ""
+
+    accent = p["accent"].lstrip("#")
+    accent_rgb = tuple(int(accent[i:i + 2], 16) for i in (0, 2, 4))
+    stamp = f"{base_name}\n{p['accent']}\n{THEME_DIR.name}\n"
+    if FOLDERS_STAMP.is_file() and FOLDERS_STAMP.read_text(encoding="utf-8") == stamp \
+            and icon_theme_dir(FOLDERS_NAME):
+        log("yaru folders", f"{FOLDERS_NAME} already {p['accent']}")
+        return FOLDERS_NAME
+
+    ref_src = sources.get("48x48/places/folder.png") or next(iter(sources.values()))
+    ref = dominant_color(ref_src)
+    if ref is None:
+        log("yaru folders", f"cannot sample {ref_src.name} — keeping plain folders")
+        return ""
+
+    if DRY:
+        log("yaru folders", f"{len(sources)} icons -> {FOLDERS_NAME} "
+                            f"(base {base_name}, ref #{''.join(f'{c:02x}' for c in ref)})")
+        return FOLDERS_NAME
+
+    # rebuilt from scratch every time: an icon-theme.cache or an orphaned file
+    # from an earlier base would shadow the new art otherwise
+    if FOLDERS_DIR.exists():
+        shutil.rmtree(FOLDERS_DIR)
+    FOLDERS_DIR.mkdir(parents=True, exist_ok=True)
+    for rel, src in sources.items():
+        tint_folder(src, FOLDERS_DIR / rel, ref, accent_rgb)
+    (FOLDERS_DIR / "index.theme").write_text(
+        folders_index(base_name, sources), encoding="utf-8")
+    FOLDERS_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    FOLDERS_STAMP.write_text(stamp, encoding="utf-8")
+    log("yaru folders", f"{len(sources)} icons tinted {p['accent']} (base {base_name})")
+    return FOLDERS_NAME
+
+
 # ----------------------------------------------------------------- gsettings --
 
 def current_gtk_theme() -> str:
@@ -466,23 +1150,22 @@ def gtk_theme_name(p: dict, current: str) -> str:
     return "Adwaita" if p["mode"] == "light" else "Adwaita-dark"
 
 
-def apply_gsettings(p: dict):
+def apply_gsettings(p: dict, icons: str, have_icons: bool):
     """omarchy-theme-set-gnome port: scheme + icons per theme; GTK theme =
-    the user's sticky choice flipped to this theme's mode."""
+    the user's sticky choice flipped to this theme's mode. `icons` is the
+    folder-colour overlay when one was built, else the theme's plain variant —
+    `have_icons` says whether either actually exists to be applied."""
     scheme = "prefer-light" if p["mode"] == "light" else "prefer-dark"
 
-    # per-theme icon variant (icons.theme), defaults to omarchy's Yaru-blue
-    icons_file = THEME_DIR / "icons.theme"
-    icons = icons_file.read_text().strip() if icons_file.is_file() else "Yaru-blue"
     gtk = gtk_theme_name(p, current_gtk_theme())
 
     gs("color-scheme", f"'{scheme}'")
     gs("gtk-theme", f"'{gtk}'")
-    if (pathlib.Path("/usr/share/icons") / icons).is_dir():
+    if have_icons:
         gs("icon-theme", f"'{icons}'")
     else:
         log("icon-theme", f"{icons} not installed yet — keeping current")
-    return gtk, scheme, icons
+    return gtk, scheme
 
 
 def apply_gtk_ini(gtk: str, scheme: str, icons: str, have_icons: bool):
@@ -1080,9 +1763,14 @@ if "--btop-only" in sys.argv:
     log("done", "btop theme built only")
     sys.exit(0)
 
-gtk, scheme, icons = apply_gsettings(p)
 icons_file = THEME_DIR / "icons.theme"
-have_icons = icons_file.is_file() and (pathlib.Path("/usr/share/icons") / icons).is_dir()
+declared_icons = icons_file.read_text().strip() if icons_file.is_file() else "Yaru-blue"
+# folders first: the overlay has to exist before gsettings/settings.ini point
+# at it, and both are told about it through the same `icons` name
+folder_theme = apply_folders(p, declared_icons)
+icons = folder_theme or declared_icons
+have_icons = bool(folder_theme) or (icons_file.is_file() and icon_theme_dir(icons) is not None)
+gtk, scheme = apply_gsettings(p, icons, have_icons)
 apply_gtk_ini(gtk, scheme, icons, have_icons)
 apply_xsettingsd(gtk, icons, have_icons)
 apply_gtk3_css(p, gtk)
@@ -1090,6 +1778,7 @@ apply_gtk4_css(p, gtk)
 apply_foot(p)
 apply_kitty(p)
 apply_chromium(p)
+apply_firefox(p)
 apply_hyprland(p, raw)
 apply_btop(p)
 apply_nvim(p)

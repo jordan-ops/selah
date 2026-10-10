@@ -25,7 +25,12 @@
 #   colors.toml --toml2colors.py--> ~/.local/state/quickshell/generated/colors.json
 #                                   Colors.qml watches it -> live shell recolor
 #   colors.toml --global-theme.py-> kitty, foot, GTK, hypr colors.lua, btop,
-#                                   chromium policy, SDDM greeter
+#                                   chromium policy, SDDM greeter, the Firefox
+#                                   profile (userChrome/userContent + prefs,
+#                                   restarted by hand — Gecko has no policy
+#                                   hook) and ~/.local/share/icons/
+#                                   quickshell-folders (Yaru folders tinted
+#                                   to the accent)
 #   backgrounds/default.*         -> ~/.local/state/quickshell/current-wallpaper
 #                                   Background.qml crossfades to it
 #
