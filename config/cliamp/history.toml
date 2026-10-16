@@ -1,8 +1,71 @@
 [[entry]]
-played_at = "2026-10-10T09:48:52Z"
+played_at = "2026-10-16T13:23:54Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
 genre = "pop"
+
+[[entry]]
+played_at = "2026-10-12T14:20:35Z"
+path = "http://ice2.somafm.com/bossa-128-aac"
+title = "Soma FM Bossa Beyond [128k] · United States Of America"
+genre = "bossa nova"
+
+[[entry]]
+played_at = "2026-10-12T14:20:34Z"
+path = "https://nl4.mystreaming.net/er/dianakrall/icecast.audio"
+title = "Exclusively Diana Krall [128k] · United Arab Emirates"
+genre = "bossa nova,jazz,standards"
+
+[[entry]]
+played_at = "2026-10-12T14:19:46Z"
+path = "https://radio.cliamp.stream/meditative/tracks/70a47e324d459c22"
+title = "Innocence"
+artist = "Juhani Junkala"
+album = "JRPG Music Packs"
+
+[[entry]]
+played_at = "2026-10-12T14:18:22Z"
+path = "https://radio.cliamp.stream/meditative/tracks/ef8b61b1da07a56e"
+title = "Summer Memories"
+artist = "Juhani Junkala"
+album = "JRPG Music Packs"
+
+[[entry]]
+played_at = "2026-10-12T14:17:02Z"
+path = "https://radio.cliamp.stream/meditative/tracks/13ad911cc9962caf"
+title = "Sand Castles"
+artist = "Juhani Junkala"
+album = "JRPG Music Packs"
+
+[[entry]]
+played_at = "2026-10-12T14:15:01Z"
+path = "http://54.38.43.201:8009/stream-128kmp3-BossaNovaBrazil"
+title = "Rádio Bossa Nova Brazil [128k] · Brazil"
+genre = "bossa nova,brazilian music"
+
+[[entry]]
+played_at = "2026-10-12T14:14:50Z"
+path = "http://c32.radioboss.fm:8139/stream"
+title = "Nostalgie New York [128k] · United States Of America"
+genre = "60s,70s,80s,90s,classic hits,classic rock,disco,music,nostalgie,pop,rock and roll,smooth jazz,world music,worlds best classic hits"
+
+[[entry]]
+played_at = "2026-10-12T14:14:42Z"
+path = "http://jking.cdnstream1.com/b22139_128mp3"
+title = "101 SMOOTH JAZZ [192k] · United States Of America"
+genre = "easy listening,jazz,smooth jazz"
+
+[[entry]]
+played_at = "2026-10-12T14:13:56Z"
+path = "https://streaming.live365.com/a01484"
+title = "Funk the Planet [192k] · United States Of America"
+genre = "classic hip hop,contemporary r&b,disco funk,funk,future funk,hip hop,hip-hop,hip-hop and rap oldies,hiphop,hiphop r&b,jazz funk,neo soul,new jack swing,p-funk,r&b,r&b soul,r&b/urban,retro r&b,soul,soul music"
+
+[[entry]]
+played_at = "2026-10-11T13:48:37Z"
+path = "https://stream.revma.ihrhls.com/zc1629"
+title = "100.3 KISS FM"
+genre = "pop,top 40"
 
 [[entry]]
 played_at = "2026-10-09T19:03:14Z"
@@ -55,12 +118,6 @@ played_at = "2026-10-09T18:45:57Z"
 path = "http://ice-the.musicradio.com/CapitalManchester"
 title = "Capital FM Manchester"
 genre = "manchester,pop"
-
-[[entry]]
-played_at = "2026-10-09T18:44:58Z"
-path = "https://stream.revma.ihrhls.com/zc1629"
-title = "100.3 KISS FM"
-genre = "pop,top 40"
 
 [[entry]]
 played_at = "2026-10-09T13:35:56Z"

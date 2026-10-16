@@ -133,10 +133,10 @@ hl.curve("m3BounceWide",   { type = "spring", mass = 1, stiffness = 105.83, damp
 -- (its 7ds is already a deliberate slow zoom).
 hl.animation({ leaf = "global",        enabled = true,  speed = 15,    bezier = "default" })
 hl.animation({ leaf = "border",        enabled = true,  speed = 8.09,  bezier = "m3Standard" })
-hl.animation({ leaf = "windows",       enabled = true,  speed = 7.19,  spring = "easy" })
-hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 6,     spring = "m3Bounce",      style = "slide" })
+hl.animation({ leaf = "windows",       enabled = true,  speed = 10,    spring = "easy" })
+hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 12,    spring = "m3Bounce",      style = "slide" })
 hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 3,     bezier = "m3Accelerate",   style = "slide" })
-hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 6,     bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 12,    bezier = "m3Decelerate" })
 hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 3,     bezier = "m3Accelerate" })
 hl.animation({ leaf = "fade",          enabled = true,  speed = 4.5,   bezier = "m3Standard" })
 hl.animation({ leaf = "layers",        enabled = true,  speed = 5.72,  bezier = "m3Standard" })

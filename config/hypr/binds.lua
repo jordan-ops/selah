@@ -43,6 +43,12 @@ hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
 
+-- Swap the active window's position with its neighbour (mainMod + SHIFT + arrow keys)
+hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.window.swap({ direction = "left" }))
+hl.bind(mainMod .. " + SHIFT + right", hl.dsp.window.swap({ direction = "right" }))
+hl.bind(mainMod .. " + SHIFT + up",    hl.dsp.window.swap({ direction = "up" }))
+hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.window.swap({ direction = "down" }))
+
 -- Switch workspaces with mainMod + [0-9]
 -- Move active window to a workspace with mainMod + SHIFT + [0-9]
 for i = 1, 10 do
@@ -105,6 +111,7 @@ hl.bind(mainMod .. " + H",                     hl.dsp.exec_cmd("qs ipc call bar 
 hl.bind(mainMod .. " + T",                     hl.dsp.exec_cmd("qs ipc call tuck tuck"))           -- stash the focused window
 hl.bind(mainMod .. " + SHIFT + T",             hl.dsp.exec_cmd("qs ipc call tuck restoreLast"))     -- bring the stash back
 hl.bind(mainMod .. " + slash",                 hl.dsp.exec_cmd("qs ipc call cheatsheet toggle"))    -- keybind cheat sheet
+hl.bind(mainMod .. " + TAB",                   hl.dsp.exec_cmd("qs ipc call overview toggle"))      -- layout overview / floor-plan
 
 -- Full-screen screenshot to ~/Pictures/Screenshots + clipboard
 hl.bind("Print", hl.dsp.exec_cmd("bash ~/.local/bin/screenshot.sh"))

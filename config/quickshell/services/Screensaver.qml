@@ -55,6 +55,15 @@ Singleton {
     readonly property string flagFile: flagDir + "/screensaver-off"
     property bool enabled: true
 
+    // True while a saver terminal is actually on screen — the runner reports
+    // it (`qs ipc call screensaver started|stopped`: started after its setup,
+    // stopped first thing in its exit trap, so the pair survives every normal
+    // exit path). Bar.qml gates the bar's visibility on this: the bar is a
+    // layer-shell surface and layer-shell ALWAYS paints above normal windows,
+    // so without this the bar sits visibly over the fullscreen saver.
+    // Session-only state, same as shell.qml's barVisible.
+    property bool active: false
+
     // one-shot exit-code probe (`test -e` → 0 = flag present = saver off)
     Process {
         command: ["test", "-e", root.flagFile]
@@ -137,6 +146,9 @@ Singleton {
 
     IpcHandler {
         target: "screensaver"
+        // runner lifecycle reports — see active above; Bar.qml binds on it
+        function started(): void { root.active = true }
+        function stopped(): void { root.active = false }
         // on demand, honoring omarchy's screensaver-off flag file
         function launch() { Quickshell.execDetached([root.launcher]) }
         // past the flag — omarchy's System > Screensaver action
@@ -152,7 +164,8 @@ Singleton {
                 saverEnabled: saverIdle.enabled,
                 saverTimeout: saverIdle.timeout,
                 saverIsIdle: saverIdle.isIdle,
-                idleSeconds: root.idleSeconds
+                idleSeconds: root.idleSeconds,
+                active: root.active
             })
         }
     }

@@ -37,10 +37,14 @@ Variants {
         id: toplevel
         required property var modelData
         screen: modelData
-        // shell.qml's barVisible (SUPER+H / `qs ipc call bar toggle`).
+        // shell.qml's barVisible (SUPER+H / `qs ipc call bar toggle`),
+        // gated on Screensaver.active (the runner's started/stopped reports).
         // false unmaps the layer surface entirely — Hyprland releases the
         // exclusive zone with it, so windows reflow into the freed strip.
-        visible: barRoot.barVisible
+        // The gate exists because layer-shell surfaces paint above normal
+        // windows: without it the bar draws straight over the fullscreen
+        // saver terminal, and unmapping is the only way to get it off.
+        visible: barRoot.barVisible && !Services.Screensaver.active
 
         // Hiding the bar also closes whatever the pill had open: an
         // unmapped card can't receive its click-away or Escape, and the

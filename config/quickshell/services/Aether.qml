@@ -544,6 +544,19 @@ Singleton {
         whSorting = id
         whSearchTimer.restart()
     }
+    // wallhaven's own "Search for similar..." — the API spells it like:<id>,
+    // so this is exactly the query a user could type, minus the typing. The
+    // id is the selected card's (its label prints it too), and setFilter()
+    // takes the same path as typing: debounce timer -> whSearch().
+    function whSimilar() {
+        if (view !== "wallhaven") return
+        const it = viewModel[currentIndex]
+        if (!it || !it.id) {
+            statusMsg = "select a wallhaven result first"
+            return
+        }
+        setFilter("like:" + it.id)
+    }
     function whSearchKey() { return whSorting + "|" + filter.trim() }
 
     // Single entry point for a wallhaven fetch. The whole request state

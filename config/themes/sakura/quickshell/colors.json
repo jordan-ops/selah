@@ -1,12 +1,12 @@
 {
   "md3": {
-    "background": "#111620",
-    "surface_variant": "#111620",
-    "secondary_container": "#292d36",
-    "primary": "#9cadd8",
-    "on_background": "#e0c9b3",
-    "on_surface_variant": "#616369",
-    "error": "#d69991",
-    "outline": "#292d36"
+    "background": "#030714",
+    "surface_variant": "#030714",
+    "secondary_container": "#1c202c",
+    "primary": "#ad6688",
+    "on_background": "#FDECE0",
+    "on_surface_variant": "#5b5e64",
+    "error": "#c67e89",
+    "outline": "#1c202c"
   }
 }

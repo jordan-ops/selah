@@ -575,6 +575,41 @@ Variants {
                                 }
                             }
                         }
+
+                        // --- wallhaven: like:<id> of the selected card ---
+                        // wallhaven's own "Search for similar...", minus the
+                        // typing: it puts like:<id> in the search box, which
+                        // is where the query stays visible and editable. The
+                        // id is spelled out so the syntax stays learnable.
+                        Rectangle {
+                            visible: win.aether.view === "wallhaven"
+                            width: similarT.implicitWidth + 18
+                            height: 28
+                            radius: 7
+                            // Reactive through viewModel/currentIndex (a bare
+                            // function call would not re-run on selection).
+                            readonly property string wid: {
+                                const it = win.aether.viewModel[win.aether.currentIndex]
+                                return it && it.id ? it.id : ""
+                            }
+                            color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
+                                           Services.Colors.text.b, 0.08)
+                            border.color: Services.Colors.low
+                            border.width: 1
+                            Text {
+                                id: similarT
+                                anchors.centerIn: parent
+                                text: parent.wid !== "" ? "Similar to " + parent.wid : "Similar"
+                                color: Services.Colors.textMuted
+                                font.family: Services.Fonts.family
+                                font.pixelSize: 12
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: win.aether.whSimilar()
+                            }
+                        }
                     }
 
                     // (no pager here anymore: wallhaven results load on

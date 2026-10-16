@@ -13,18 +13,27 @@ this setup: the palette.
 No key needed for SFW: --apikey / $WALLHAVEN_API_KEY only unlocks
 sketchy/NSFW plus the account's own default filters. Anonymous requests are
 capped at ~45/min (HTTP 429 when exceeded); one search plus one download per
-theme apply stays far below that.
+theme apply stays far below that. The key does NOT unlock anything extra for
+--similar (verified live: an apikey in the URL changes neither the challenge
+nor the result set), so similar searches stay keyless.
+
+--similar <id|url> is wallhaven's own "Search for similar..." — the API
+spells it like:<id> under q (documented: tagname, -tag, +tag1 +tag2,
+@user, id:123, type:png, like:wallpaper ID). Because a query that merely
+starts with "like" trips a Cloudflare challenge from this client, _search()
+retries that one query percent-encoded; see _search() for the measurements.
 
 Endpoints (note /w/<id>: the obvious /api/v1/wallpaper/<id> 404s — checked
 live, every id included; and the search term rides on `q=`, because
 `query=` is silently ignored — checked live, it searches everything):
     /search?q=&categories=&purity=&sorting=&order=&topRange=&atleast=
            &ratios=&colors=&page=&seed=&apikey=
+           q=like:<id> is the site's "Search for similar..." (see _search)
     /w/<id>            one wallpaper record, tags included
     <data.path field>  the full-size image, which `download` fetches verbatim
 
-usage: wallhaven.py search <query...> [--categories 111] [--purity 100]
-                          [--sorting relevance] [--order desc]
+usage: wallhaven.py search <query...> [--similar ID|URL] [--categories 111]
+                          [--purity 100] [--sorting relevance] [--order desc]
                           [--top-range 1d|3d|1w|1M|1y|all] [--at-least WxH]
                           [--ratios 16x9,21x9] [--colors [#]rrggbb[,...]]
                           [--page N] [--seed STR] [--limit N] [--json]
@@ -40,11 +49,13 @@ Output:
     download  the absolute file path ALONE on stdout; progress on stderr
 
 Query words may sit anywhere around the flags and may use wallhaven's own
-syntax — ~tag, -exclude, id:123, @user, #id — because they are re-attached
-after `--` before argparse sees them (argparse would read a bare -exclude as
-an unknown flag, and it refuses words placed after a filter). Double-dash
-words stay flags, so a typo'd filter fails loudly instead of quietly turning
-into part of the query.
+syntax — ~tag, -exclude, id:123, @user, #id, like:123 — because they are
+re-attached after `--` before argparse sees them (argparse would read a
+bare -exclude as an unknown flag, and it refuses words placed after a
+filter). Double-dash words stay flags, so a typo'd filter fails loudly
+instead of quietly turning into part of the query. --similar is a value
+flag for the same reason: its id must survive as a flag value rather than
+become a query word.
 """
 
 import argparse
@@ -77,7 +88,7 @@ RESULT_FIELDS = ("id", "url", "resolution", "category", "purity", "thumbs",
 VALUE_FLAGS = frozenset({
     "--categories", "--purity", "--sorting", "--order", "--top-range",
     "--at-least", "--ratios", "--colors", "--page", "--seed", "--limit",
-    "--apikey",
+    "--apikey", "--similar",
 })
 
 SORTINGS = ("date_added", "relevance", "random", "views", "favorites",
@@ -94,7 +105,13 @@ FILE_TYPE_EXT = {"image/jpeg": "jpg", "image/png": "png",
 
 
 class WallhavenError(Exception):
-    """A failure worth exactly one clean line on stderr (see main())."""
+    """A failure worth exactly one clean line on stderr (see main()).
+
+    challenge marks the failures Cloudflare created (403 + cf-mitigated) as
+    opposed to wallhaven's own — see _is_challenge(). It stays False for
+    every other error, class-wide, so callers can test it with getattr().
+    """
+    challenge = False
 
 
 # --- argparse validators -----------------------------------------------------
@@ -173,11 +190,43 @@ def _normalize_search_argv(argv):
 
 
 # --- HTTP --------------------------------------------------------------------
-def _http_error(exc, what):
+def _error_body(exc):
+    """The response body of an HTTPError, decoded, best effort.
+
+    Read exactly once per failure: _http_error() wants it for wallhaven's
+    own error text and _is_challenge() for Cloudflare's marker page, and
+    the first read consumes the stream.
+    """
+    try:
+        return exc.read().decode("utf-8", "replace")
+    except (ValueError, AttributeError, OSError):
+        return ""
+
+
+def _is_challenge(exc, body):
+    """True when a 403 came from Cloudflare's bot check, not from wallhaven.
+
+    wallhaven's own refusals arrive as JSON ({"error": ...}) with a normal
+    403; a managed challenge is flagged cf-mitigated: challenge and carries
+    an HTML "Just a moment ..." page instead. Telling them apart is what
+    lets _search() retry once instead of handing the user a bare
+    "forbidden" for a request wallhaven would have served.
+    """
+    if getattr(exc, "code", None) != 403:
+        return False
+    headers = getattr(exc, "headers", None)
+    mitigated = headers.get("cf-mitigated") if headers is not None else None
+    if mitigated is not None and str(mitigated).lower() == "challenge":
+        return True
+    return "Just a moment" in body
+
+
+def _http_error(exc, what, body=None):
     """One human line per failure mode wallhaven actually uses."""
+    if body is None:
+        body = _error_body(exc)
     detail = ""
     try:
-        body = exc.read().decode("utf-8", "replace")
         detail = str(json.loads(body).get("error") or "")
     except (ValueError, AttributeError, OSError):
         pass
@@ -197,18 +246,38 @@ def _http_error(exc, what):
     return msg
 
 
-def api_get(path, params, what):
-    """GET an API endpoint; return the decoded body or raise WallhavenError."""
-    query = {k: v for k, v in params.items() if v not in (None, "")}
+def api_get(path, params, what, raw_query_keys=()):
+    """GET an API endpoint; return the decoded body or raise WallhavenError.
+
+    raw_query_keys names params whose value is ALREADY in its wire form and
+    must not be escaped a second time — _search()'s challenge retry is the
+    only user, and it exists because urlencode() would turn %6C into %256C,
+    handing wallhaven the escape text instead of the query (checked live:
+    total 0, meta.query "%6C%69...").
+    """
+    pairs = []
+    for key, val in params.items():
+        if val in (None, ""):
+            continue
+        # raw_query_keys keep the wire form they already carry; everything
+        # else is escaped exactly the way urlencode() would have escaped it.
+        value = str(val)
+        if key not in raw_query_keys:
+            value = urllib.parse.quote_plus(value)
+        pairs.append("{0}={1}".format(urllib.parse.quote_plus(key), value))
     url = API + path
-    if query:
-        url += "?" + urllib.parse.urlencode(query)
+    if pairs:
+        url += "?" + "&".join(pairs)
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             raw = resp.read()
     except urllib.error.HTTPError as exc:
-        raise WallhavenError(_http_error(exc, what)) from None
+        body = _error_body(exc)
+        err = WallhavenError(_http_error(exc, what, body))
+        if _is_challenge(exc, body):
+            err.challenge = True
+        raise err from None
     except urllib.error.URLError as exc:
         raise WallhavenError(
             "{0}: cannot reach wallhaven ({1})".format(what, exc.reason)) from None
@@ -268,12 +337,56 @@ def _image_ext(src, file_type):
 
 
 # --- commands ----------------------------------------------------------------
+def _wire_encode(text):
+    """Percent-encode every byte of a query value.
+
+    wallhaven decodes it server-side — meta.query echoes the original
+    string — so this is the SAME query on a different wire encoding, not a
+    different search. It must then reach the wire verbatim (see api_get's
+    raw_query_keys): url-escaping it again would search for "%6C...".
+    It exists purely for the challenge in _search().
+    """
+    return "".join("%{0:02X}".format(b) for b in text.encode("utf-8"))
+
+
+def _search(params):
+    """GET /search, with one encoded retry when Cloudflare challenges us.
+
+    Why the retry exists (measured live, 2026-10, same IP and UA seconds
+    apart): `like:<id>` — and any query merely STARTING with "like" — comes
+    back 403 with `cf-mitigated: challenge`, while every other word returns
+    200; an apikey in the URL changes nothing (403 with a key, 401 on a bad
+    key with an ordinary query, so the origin is never even reached for the
+    challenged form). The rule matches the RAW query string: `q=%6cike...`
+    passes and meta.query reads back `like:...`. So one retry with the whole
+    query percent-encoded costs a single extra request, only in the case
+    that would otherwise just fail.
+    """
+    try:
+        return api_get("/search", params, "search")
+    except WallhavenError as exc:
+        if not exc.challenge or not params.get("q"):
+            raise
+    retry = dict(params)
+    retry["q"] = _wire_encode(params["q"])
+    print("wallhaven.py: cloudflare challenged this query, retrying it "
+          "percent-encoded ...", file=sys.stderr)
+    # raw_query_keys: the encoding IS the point, urlencode() would undo it.
+    return api_get("/search", retry, "search", raw_query_keys=("q",))
+
+
 def cmd_search(args):
+    query = " ".join(args.query)
+    if args.similar:
+        # wallhaven's wording is "Search for similar..."; the API spells it
+        # like:<id>. extract_id() already accepts a bare id or either URL
+        # form, and rejects anything else before a request is made.
+        query = "like:" + extract_id(args.similar)
     params = {
         # `q`, NOT `query`: wallhaven silently ignores `query=` (verified
         # live — unfiltered results, meta.query null), which would let the
         # search look like it worked while dropping the words entirely.
-        "q": " ".join(args.query),
+        "q": query,
         "categories": args.categories,
         "purity": args.purity,
         "sorting": args.sorting,
@@ -296,7 +409,7 @@ def cmd_search(args):
     if args.seed:
         params["seed"] = args.seed
 
-    doc = api_get("/search", params, "search")
+    doc = _search(params)
     data = doc.get("data") if isinstance(doc, dict) else None
     results = [{k: w.get(k) for k in RESULT_FIELDS}
                for w in (data or []) if isinstance(w, dict)]
@@ -391,9 +504,14 @@ def build_parser():
     sp = sub.add_parser("search",
                         help="search; pretty JSON {results, meta} on stdout")
     add_apikey(sp)
-    sp.add_argument("query", nargs="+", metavar="word",
+    sp.add_argument("query", nargs="*", metavar="word",
                     help="expression; wallhaven syntax passes through "
-                         "(~tag, -exclude, id:123, @user, #id)")
+                         "(~tag, -exclude, id:123, @user, #id, like:123); "
+                         "replaced, not joined, by --similar")
+    sp.add_argument("--similar", metavar="ID|URL", default=None,
+                    help="search for wallpapers LIKE this one — wallhaven's "
+                         "own 'Search for similar...' (id or wallhaven URL); "
+                         "needs no API key")
     sp.add_argument("--categories", default="111", metavar="MASK",
                     help="general/anime/people bitmask (default: 111)")
     sp.add_argument("--purity", default="100", metavar="MASK",
@@ -443,7 +561,18 @@ def build_parser():
 def main(argv=None):
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     argv = _normalize_search_argv(argv)
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if getattr(args, "command", None) == "search":
+        # --similar and query words are two ways to say WHAT to search for.
+        # query is nargs="*" so either can be left out — which also means
+        # both can be wrong, and both mistakes get named here, before any
+        # request is made.
+        if args.similar and args.query:
+            parser.error("--similar replaces the query words, "
+                         "it does not add to them")
+        if not args.similar and not args.query:
+            parser.error("search wants query words, or --similar <id|url>")
     try:
         return args.func(args)
     except WallhavenError as exc:

@@ -194,20 +194,23 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    // First click lands the selection (and opens a group, since
-                    // there is nothing to "select" inside a closed one); a
-                    // second click on the same card, or a double click, acts.
+                    // A click only ever SELECTS — including a click on the
+                    // card that is already selected. Acting used to need a
+                    // second click on the same card, which read as "one
+                    // click applies it": a search pre-selects the first
+                    // result, so clicking that one once already found it
+                    // selected and immediately downloaded + applied it.
+                    // Now only a double click (or Enter, or the footer's
+                    // Create) downloads and applies.
                     onClicked: {
                         if (!cell.it) return
-                        if (cell.isGroup) {
-                            Services.Aether.openGroup(cell.it.theme)
-                        } else if (cell.sel) {
-                            Services.Aether.activate()
-                        } else {
-                            Services.Aether.select(cell.index)
-                        }
+                        if (cell.isGroup) Services.Aether.openGroup(cell.it.theme)
+                        else Services.Aether.select(cell.index)
                     }
-                    onDoubleClicked: Services.Aether.activate()
+                    onDoubleClicked: {
+                        if (!cell.it || cell.isGroup) return
+                        Services.Aether.activate()
+                    }
                 }
             }
         }

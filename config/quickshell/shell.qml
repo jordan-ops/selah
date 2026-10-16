@@ -55,6 +55,7 @@ ShellRoot{
     EdgeLight{}      // notification edge glow — qs ipc call edgelight test
     ThemeFlip{}      // frozen-frame theme-switch reveal — qs ipc call themeflip test
     CheatSheet{}     // keybinding cheat sheet — qs ipc call cheatsheet toggle (SUPER + /)
+    Overview{}       // layout overview / floor-plan — qs ipc call overview toggle (SUPER + TAB)
     // Polkit prompt merged into the bar (pill "polkit" mode in Bar.qml,
     // like the launcher) — PolkitDialog.qml deprecated, kept as reference.
     // MediaBar{}

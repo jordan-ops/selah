@@ -53,6 +53,9 @@
 #                   search wallhaven.cc, download one result, then the exact
 #                   same pipeline as a local wallpaper; --add-to works too
 #                   (fetch first, then add)
+#   aether-apply.sh --similar <id|url> [wallhaven filters] [options]
+#                   wallhaven's own "Search for similar..." instead of words:
+#                   find wallpapers LIKE <id>, download one, same pipeline
 
 set -euo pipefail
 
@@ -61,6 +64,7 @@ usage() {
 usage: aether-apply.sh <wallpaper> [options]
        aether-apply.sh <wallpaper> --add-to <theme>
        aether-apply.sh --wallhaven <query...> [wallhaven filters] [options]
+       aether-apply.sh --similar <id|url> [wallhaven filters] [options]
 
   --mode <mode>      aether extraction mode (default: material)
   --light             build a light palette
@@ -73,7 +77,12 @@ pipeline as a local wallpaper — --mode/--light/--palette/--no-apply behave
 identically, and --add-to is allowed (it fetches first, then adds; an add
 still never touches colors.toml):
   --wallhaven <words>  every non-flag word is the query; wallhaven syntax
-                      (~tag, -exclude, id:, @user, #id) passes through
+                      (~tag, -exclude, id:, @user, #id, like:<id>) passes
+                      through
+  --similar <ref>     wallpapers LIKE this one — wallhaven's own "Search for
+                      similar..." (a wallpaper id or its wallhaven URL).
+                      Replaces the query words rather than adding to them,
+                      combines with every filter below, and needs no API key
   --categories 111    general/anime/people bitmask (default: 111)
   --purity 100        sfw/sketchy/nsfw bitmask (default: 100; sketchy and
                       nsfw need an API key)
@@ -89,7 +98,9 @@ still never touches colors.toml):
                       Chosen CLIENT-SIDE from the fetched page: wallhaven
                       currently ignores server-side seeds (checked live), so
                       --seed cannot make the random pick reproducible
-  --api-key <key>     wallhaven API key (default: $WALLHAVEN_API_KEY)
+  --api-key <key>     wallhaven API key (default: $WALLHAVEN_API_KEY).
+                      Only sketchy/nsfw purity and the account's default
+                      filters need it — --similar does not
 EOF
     exit 1
 }
@@ -105,20 +116,22 @@ ADD_TO=""
 
 # --wallhaven replaces the <wallpaper> argument: every remaining word that is
 # not a known flag becomes the search query, so `--wallhaven mountains night
-# --at-least 2560x1440` works with no quoting even mid-query. The wallpaper
-# itself is fetched further down, right before the shared [ -f "$WP" ] check.
+# --at-least 2560x1440` works with no quoting even mid-query. --similar
+# implies the same mode (it SEARCHES by similarity instead of asking for
+# words) but is left for the loop below to read, which is why only
+# --wallhaven is consumed here. The wallpaper itself is fetched further
+# down, right before the shared [ -f "$WP" ] check.
 WH_MODE=0
 WH_QUERY=""
+WH_SIMILAR=""
 WH_ARGS=()
 WH_KEY=""
 PICK="random"
-if [ "$1" = "--wallhaven" ]; then
-    WH_MODE=1
-    shift
-else
-    WP="$1"
-    shift
-fi
+case "$1" in
+    --wallhaven) WH_MODE=1; shift ;;
+    --similar)   WH_MODE=1 ;;      # flag, value and all stay for the loop
+    *)           WP="$1"; shift ;;
+esac
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -135,6 +148,14 @@ while [ $# -gt 0 ]; do
             [ "$WH_MODE" -eq 1 ] || usage
             [ $# -ge 2 ] || usage
             WH_ARGS+=("$1" "$2")
+            shift 2 ;;
+        --similar)
+            # --similar leading the command line already set WH_MODE, so
+            # this guard only catches the other spelling: a wallpaper path
+            # followed by --similar is a mistake, not a mix of the two.
+            [ "$WH_MODE" -eq 1 ] || usage
+            [ $# -ge 2 ] || usage
+            WH_SIMILAR="$2"
             shift 2 ;;
         --pick)
             [ "$WH_MODE" -eq 1 ] || usage
@@ -164,8 +185,15 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ "$WH_MODE" -eq 1 ] && [ -z "$WH_QUERY" ]; then
+if [ "$WH_MODE" -eq 1 ] && [ -z "$WH_QUERY" ] && [ -z "$WH_SIMILAR" ]; then
     usage    # --wallhaven with nothing to search for
+fi
+
+# --similar and query words both mean "what to search for"; wallhaven.py
+# rejects the mix too, but failing here says so before any API call.
+if [ -n "$WH_SIMILAR" ] && [ -n "$WH_QUERY" ]; then
+    echo "aether-apply: --similar replaces the words — pass one, not both" >&2
+    exit 1
 fi
 
 HOME_DIR="${HOME:?HOME is not set}"
@@ -200,16 +228,26 @@ if [ "$WH_MODE" -eq 1 ]; then
 
     # One search, one page: the count and the chosen id are read from the
     # SAME document, so pick N can never drift from the list that named it.
-    if ! WH_RESULT="$("$PY" "$WH_PY" search "$WH_QUERY" --json \
+    # wallhaven.py owns both spellings — words and `--similar` (which is
+    # wallhaven's like:<id> query plus its own challenge handling) — so
+    # everything else (filters, pick, download) is identical either way.
+    if [ -n "$WH_SIMILAR" ]; then
+        WH_CMD=(search --similar "$WH_SIMILAR")
+        WH_DESC="for wallpapers like $WH_SIMILAR"
+    else
+        WH_CMD=(search "$WH_QUERY")
+        WH_DESC="for '$WH_QUERY'"
+    fi
+    if ! WH_RESULT="$("$PY" "$WH_PY" "${WH_CMD[@]}" --json \
             "${WH_ARGS[@]}")"; then
-        echo "aether-apply: wallhaven search failed for '$WH_QUERY'" >&2
+        echo "aether-apply: wallhaven search failed $WH_DESC" >&2
         exit 1
     fi
 
     COUNT="$(printf '%s' "$WH_RESULT" | "$PY" -c \
         'import json,sys; print(len(json.load(sys.stdin).get("results", [])))')"
     [ "$COUNT" -ge 1 ] || {
-        echo "aether-apply: wallhaven found nothing for '$WH_QUERY'" >&2; exit 1; }
+        echo "aether-apply: wallhaven found nothing $WH_DESC" >&2; exit 1; }
 
     # --pick is resolved CLIENT-SIDE on the fetched page: wallhaven currently
     # regenerates random seeds server-side (checked live — it ignores even
