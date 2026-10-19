@@ -33,6 +33,9 @@ Singleton {
         // near-lossless x264, which is what made these files huge.
         "recording.compress": true,
         "lock.style": "classic",
+        // which saver runs at idle — "flip" (FlipClock.qml) or "pipes"
+        // (the terminal runner); see the screensaverStyle accessor
+        "screensaver.style": "flip",
         // the desktop clock widget — off until asked for. x/y of -1 mean
         // "never placed": clockBox() centres it instead (see below), so a
         // fresh install and a lock into the Clock style both have
@@ -92,6 +95,13 @@ Singleton {
         return ["classic", "card", "minimal", "magazine", "clock"].indexOf(v) >= 0
             ? v : "classic"
     }
+    // which screensaver style idle hands get — "flip" is FlipClock.qml
+    // (in-process, static between minute flips, ~0 CPU at rest), "pipes"
+    // is the original terminal runner (~0.9 of a core while it runs).
+    // Anything but an explicit "pipes" reads as flip: a fresh install
+    // and a typo both land on the cheap one.
+    readonly property string screensaverStyle:
+        values["screensaver.style"] === "pipes" ? "pipes" : "flip"
 
     // ——— the desktop clock widget (Background.qml + lock/ Clock.qml) ———
     readonly property bool clockEnabled:

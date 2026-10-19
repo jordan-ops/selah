@@ -27,15 +27,6 @@ Rectangle {
 
     id: root
 
-    width: 760
-    height: 440
-    radius: 18
-    // panel (alpha'd) over the pill's own panel fill: two layers, so the
-    // control center reads slightly more opaque than the bare bar at
-    // transparency > 0 — never a fully solid slab either way. At 0 both
-    // are plain `background`, pixel-identical to before.
-    color: Services.Colors.panel
-
     // Mirror Services.Notifications.history into grpModel as ONE ROW PER
     // APP (a group's slot follows its newest member, so a fresh message
     // bumps that group to the top). The service reassigns the whole array
@@ -47,26 +38,44 @@ Rectangle {
     // delegate reads notifsFor(name) in a binding, so any history change
     // refreshes a group's contents without disturbing its row slot.
     function syncHistory() {
-        const keys = Services.Notifications.groupNames()
+        const keys = Services.Notifications.groupNames();
         // groups that lost every member (dismissed / Clear all):
         // remove transition fades each out in place
-        for (let i = grpModel.count - 1; i >= 0; i--)
-            if (keys.indexOf(grpModel.get(i).name) === -1)
-                grpModel.remove(i)
+        for (let i = grpModel.count - 1; i >= 0; i--) if (keys.indexOf(grpModel.get(i).name) === -1) {
+            grpModel.remove(i);
+        }
         // align from the top: a new group inserts as row i (add
         // transition drops it in with the bounce spring), an existing
         // group whose newest member jumped the queue slides into place
         // (displaced spring), rows below displace-spring
         for (let i = 0; i < keys.length; i++) {
-            let j = -1
-            for (let k = i; k < grpModel.count; k++)
-                if (grpModel.get(k).name === keys[i]) { j = k; break }
-            if (j === i) continue
-            if (j === -1) grpModel.insert(i, { "name": keys[i], "expanded": true })
-            else grpModel.move(j, i, 1)
+            let j = -1;
+            for (let k = i; k < grpModel.count; k++) if (grpModel.get(k).name === keys[i]) {
+                j = k;
+                break;
+            }
+            if (j === i)
+                continue;
+
+            if (j === -1)
+                grpModel.insert(i, {
+                "name": keys[i],
+                "expanded": true
+            });
+            else
+                grpModel.move(j, i, 1);
         }
-        while (grpModel.count > keys.length) grpModel.remove(grpModel.count - 1)
+        while (grpModel.count > keys.length)grpModel.remove(grpModel.count - 1)
     }
+
+    width: 760
+    height: 440
+    radius: 18
+    // panel (alpha'd) over the pill's own panel fill: two layers, so the
+    // control center reads slightly more opaque than the bare bar at
+    // transparency > 0 — never a fully solid slab either way. At 0 both
+    // are plain `background`, pixel-identical to before.
+    color: Services.Colors.panel
 
     // If the whole panel closes (Bar.qml's animate-then-hide), close the
     // advanced side window too — otherwise it'd still be "open"
@@ -104,9 +113,9 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: ccTitle
 
+                    font.family: Services.Fonts.family
                     text: "Control center"
                     color: Services.Colors.text
                     font.pixelSize: 15
@@ -121,9 +130,9 @@ Rectangle {
                 }
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: ccGear
 
+                    font.family: Services.Fonts.family
                     text: "󰒓"
                     font.pixelSize: 14
                     color: Services.Colors.textMuted
@@ -194,8 +203,7 @@ Rectangle {
                 Rectangle {
                     id: statusDivider
 
-                    anchors.left: Services.Battery.hasBattery ? battCol.right
-                                                              : ccRing.right
+                    anchors.left: Services.Battery.hasBattery ? battCol.right : ccRing.right
                     anchors.leftMargin: Services.Battery.hasBattery ? 14 : 8
                     anchors.verticalCenter: parent.verticalCenter
                     width: 1
@@ -204,9 +212,9 @@ Rectangle {
                 }
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: netIcon
 
+                    font.family: Services.Fonts.family
                     text: Services.Network.glyph
                     font.pixelSize: 14
                     color: Services.Network.connected ? Services.Colors.text : Services.Colors.textMuted
@@ -224,9 +232,9 @@ Rectangle {
                 }
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: netName
 
+                    font.family: Services.Fonts.family
                     text: Services.Network.connected ? Services.Network.name : "Offline"
                     font.pixelSize: 12
                     color: Services.Colors.text
@@ -246,9 +254,9 @@ Rectangle {
                 }
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: ccPower
 
+                    font.family: Services.Fonts.family
                     text: "⏻"
                     font.pixelSize: 14
                     color: Services.Colors.text
@@ -271,6 +279,17 @@ Rectangle {
             // toggles; right click on Network/Bluetooth/Audio opens the
             // matching advanced window (one click to the real controls).
             Grid {
+                // Left click OPENS the recording popup rather than starting a
+                // recording straight from a tap. The popup is where capture
+                // target (screen / window / region) and mic/system audio are
+                // chosen, plus Start/Stop/Discard — none of which a bare
+                // toggle could offer, so a one-tap start locked you into the
+                // current defaults with no way to see or change them.
+                // The control center is closed on the way out so the popup
+                // isn't fighting a full panel for the same corner of screen;
+                // Services.ScreenRecording is shared, so its state carries
+                // over and the bar's rec chip still shows the elapsed time.
+
                 id: toggleGrid
 
                 columns: 3
@@ -323,18 +342,6 @@ Rectangle {
                     onRightClicked: Services.ControlCenter.openAdvanced("audio")
                 }
 
-                // Left click OPENS the recording popup rather than starting a
-                // recording straight from a tap. The popup is where capture
-                // target (screen / window / region) and mic/system audio are
-                // chosen, plus Start/Stop/Discard — none of which a bare
-                // toggle could offer, so a one-tap start locked you into the
-                // current defaults with no way to see or change them.
-                //
-                // The control center is closed on the way out so the popup
-                // isn't fighting a full panel for the same corner of screen;
-                // Services.ScreenRecording is shared, so its state carries
-                // over and the bar's rec chip still shows the elapsed time.
-                //
                 // Right click is kept as a deliberate start/stop shortcut for
                 // when you genuinely want "hit it and record, defaults".
                 SquareToggle {
@@ -344,12 +351,10 @@ Rectangle {
                     label: Services.ScreenRecording.recording ? Services.ScreenRecording.elapsedDisplay : Services.ScreenRecording.starting ? "Starting…" : "Record"
                     active: Services.ScreenRecording.recording || Services.ScreenRecording.starting
                     onToggled: {
-                        Services.ControlCenter.close()
-                        Services.ScreenRecording.open = true
+                        Services.ControlCenter.close();
+                        Services.ScreenRecording.open = true;
                     }
-                    onRightClicked: Services.ScreenRecording.recording
-                        ? Services.ScreenRecording.stopRecording()
-                        : Services.ScreenRecording.startRecording()
+                    onRightClicked: Services.ScreenRecording.recording ? Services.ScreenRecording.stopRecording() : Services.ScreenRecording.startRecording()
                 }
 
                 // Game mode: hyprland animations/blur/shadows off, gaps
@@ -382,12 +387,13 @@ Rectangle {
 
                 // Screen saver on/off — omarchy's screensaver-off flag,
                 // the file `omarchy toggle screensaver` writes. Off also
-                // kills a running saver on the spot: every pipes.sh
-                // terminal is animation CPU this tile exists to silence.
-                // Right click runs one NOW regardless of the flag (the
-                // launcher's `force`, same as System > Screensaver).
+                // kills a running saver on the spot — flip clock or
+                // pipes.sh terminals alike: either way, CPU this tile
+                // exists to silence. Right click runs one NOW regardless
+                // of the flag (the launcher's `force`, same as System >
+                // Screensaver).
                 SquareToggle {
-                    icon: "\u{F0904}"   // nf-md-power_sleep
+                    icon: "\u{F0904}" // nf-md-power_sleep
                     label: "Screen Saver"
                     active: Services.Screensaver.enabled
                     onToggled: Services.Screensaver.toggle()
@@ -437,6 +443,7 @@ Rectangle {
             // (Services.Vitals samples /proc every 2s, 10min buffers)
             Rectangle {
                 id: vitalsCard
+
                 width: parent.width
                 height: 100
                 radius: 12
@@ -461,9 +468,11 @@ Rectangle {
                             color: Services.Colors.text
                             anchors.verticalCenter: parent.verticalCenter
                         }
+
                         Text {
-                            font.family: Services.Fonts.family
                             id: cpuLabel
+
+                            font.family: Services.Fonts.family
                             anchors.right: ramLabel.left
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -472,9 +481,11 @@ Rectangle {
                             font.bold: true
                             color: Services.Colors.accent
                         }
+
                         Text {
-                            font.family: Services.Fonts.family
                             id: ramLabel
+
+                            font.family: Services.Fonts.family
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             text: "RAM " + Math.round(Services.Vitals.mem) + "%"
@@ -482,49 +493,56 @@ Rectangle {
                             font.bold: true
                             color: Services.Colors.textMuted
                         }
+
                     }
 
                     Canvas {
                         id: vitGraph
-                        width: parent.width
-                        height: 40
 
                         property var ch: Services.Vitals.cpuHist
                         property var mh: Services.Vitals.memHist
+
+                        function line(arr, color) {
+                            const n = arr.length;
+                            if (n < 1)
+                                return ;
+
+                            const ctx = getContext("2d");
+                            const h = height, w = width;
+                            const y = (v) => {
+                                return Math.round((1 - Math.max(0, Math.min(100, v)) / 100) * (h - 2)) + 1;
+                            };
+                            ctx.beginPath();
+                            if (n === 1) {
+                                ctx.moveTo(0, y(arr[0]));
+                                ctx.lineTo(w, y(arr[0]));
+                            } else {
+                                for (let i = 0; i < n; i++) {
+                                    const x = i / (n - 1) * (w - 1) + 0.5;
+                                    if (i === 0)
+                                        ctx.moveTo(x, y(arr[i]));
+                                    else
+                                        ctx.lineTo(x, y(arr[i]));
+                                }
+                            }
+                            ctx.strokeStyle = color;
+                            ctx.lineWidth = 1.5;
+                            ctx.lineJoin = "round";
+                            ctx.lineCap = "round";
+                            ctx.stroke();
+                        }
+
+                        width: parent.width
+                        height: 40
                         onChChanged: requestPaint()
                         onMhChanged: requestPaint()
                         onWidthChanged: requestPaint()
                         Component.onCompleted: requestPaint()
-
-                        function line(arr, color) {
-                            const n = arr.length
-                            if (n < 1) return
-                            const ctx = getContext("2d")
-                            const h = height, w = width
-                            const y = v => Math.round((1 - Math.max(0, Math.min(100, v)) / 100) * (h - 2)) + 1
-                            ctx.beginPath()
-                            if (n === 1) {
-                                ctx.moveTo(0, y(arr[0]))
-                                ctx.lineTo(w, y(arr[0]))
-                            } else {
-                                for (let i = 0; i < n; i++) {
-                                    const x = i / (n - 1) * (w - 1) + 0.5
-                                    if (i === 0) ctx.moveTo(x, y(arr[i]))
-                                    else ctx.lineTo(x, y(arr[i]))
-                                }
-                            }
-                            ctx.strokeStyle = color
-                            ctx.lineWidth = 1.5
-                            ctx.lineJoin = "round"
-                            ctx.lineCap = "round"
-                            ctx.stroke()
-                        }
-
                         onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            line(mh, Services.Colors.textMuted)
-                            line(ch, Services.Colors.accent)
+                            const ctx = getContext("2d");
+                            ctx.clearRect(0, 0, width, height);
+                            line(mh, Services.Colors.textMuted);
+                            line(ch, Services.Colors.accent);
                         }
                     }
 
@@ -541,6 +559,7 @@ Rectangle {
                             color: Services.Colors.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
+
                         Text {
                             font.family: Services.Fonts.family
                             text: "\u2193 " + Services.Vitals.netDownLabel
@@ -548,8 +567,11 @@ Rectangle {
                             color: Services.Colors.textMuted
                             anchors.verticalCenter: parent.verticalCenter
                         }
+
                     }
+
                 }
+
             }
 
             Row {
@@ -558,9 +580,9 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    font.family: Services.Fonts.family
                     id: notifTitle
 
+                    font.family: Services.Fonts.family
                     // total notifications, not group rows — "3" means three
                     // messages even when they're folded into one app header
                     text: "Notifications" + (Services.Notifications.history.length > 0 ? "  " + Services.Notifications.history.length : "")
@@ -587,9 +609,9 @@ Rectangle {
                     color: Services.Colors.surface
 
                     Text {
-                        font.family: Services.Fonts.family
                         id: clearAllLabel
 
+                        font.family: Services.Fonts.family
                         anchors.centerIn: parent
                         text: "Clear all"
                         font.pixelSize: 11
@@ -617,19 +639,32 @@ Rectangle {
             }
 
             Connections {
-                target: Services.Notifications
+                function onHistoryChanged() {
+                    root.syncHistory();
+                }
 
-                function onHistoryChanged() { root.syncHistory() }
+                target: Services.Notifications
             }
 
             ListView {
                 id: historyList
 
                 width: parent.width
-                height: parent.height - 144   // vitals card + title row
+                height: parent.height - 144 // vitals card + title row
                 clip: true
                 spacing: 8
                 model: grpModel
+
+                // shown when there's nothing to display — same idea as a
+                // Waybar module returning an empty string and disappearing
+                Text {
+                    font.family: Services.Fonts.family
+                    anchors.centerIn: parent
+                    visible: historyList.count === 0
+                    text: "No notifications"
+                    color: Services.Colors.textMuted
+                    font.pixelSize: 12
+                }
 
                 // M3 spec motion (m3.material.io/styles/motion): new cards
                 // ENTER by dropping one row up into the top slot (the 64px
@@ -649,13 +684,16 @@ Rectangle {
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Services.Motion.emphasizedDecelerate
                         }
+
                         SpringAnimation {
                             property: "y"
                             from: -64
                             spring: Services.Motion.bounceSpring
                             damping: Services.Motion.bounceDamping
                         }
+
                     }
+
                 }
 
                 remove: Transition {
@@ -666,6 +704,7 @@ Rectangle {
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Services.Motion.emphasizedAccelerate
                     }
+
                 }
 
                 displaced: Transition {
@@ -676,17 +715,7 @@ Rectangle {
                         spring: Services.Motion.bounceSpring
                         damping: Services.Motion.bounceDamping
                     }
-                }
 
-                // shown when there's nothing to display — same idea as a
-                // Waybar module returning an empty string and disappearing
-                Text {
-                    font.family: Services.Fonts.family
-                    anchors.centerIn: parent
-                    visible: historyList.count === 0
-                    text: "No notifications"
-                    color: Services.Colors.textMuted
-                    font.pixelSize: 12
                 }
 
                 // one group per app: header (icon, name, count, caret) with
@@ -697,32 +726,31 @@ Rectangle {
                 delegate: Rectangle {
                     id: groupCard
 
-                    width: historyList.width
-                    radius: 10
-                    color: Services.Colors.surface
-
                     // this app's messages, newest-first — a binding on the
                     // service's history, so a dismiss refreshes the group's
                     // contents without a row-model update
                     readonly property var notifs: Services.Notifications.notifsFor(model.name)
                     readonly property string appIcon: notifs.length > 0 ? notifs[0].appIcon : ""
                     readonly property bool open: model.expanded
-
                     // drives the badge on the app icon — a folded group
                     // still tells you something urgent is inside
                     readonly property bool hasCritical: {
-                        for (let i = 0; i < notifs.length; i++)
-                            if (notifs[i].urgency === NotificationUrgency.Critical) return true
-                        return false
+                        for (let i = 0; i < notifs.length; i++) if (notifs[i].urgency === NotificationUrgency.Critical) {
+                            return true;
+                        }
+                        return false;
                     }
 
+                    width: historyList.width
+                    radius: 10
+                    color: Services.Colors.surface
                     // header (always) + folded rows when open; the spring
                     // makes expand/collapse settle like the pill morph
                     height: headerRow.height + notifsCol.height + (notifsCol.height > 0 ? 6 : 0)
-                    Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
 
                     Row {
                         id: headerRow
+
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
@@ -767,10 +795,12 @@ Rectangle {
                                 border.width: 1.5
                                 border.color: Services.Colors.surface
                             }
+
                         }
 
                         Text {
                             id: appNameText
+
                             font.family: Services.Fonts.family
                             text: model.name
                             font.pixelSize: 12
@@ -784,6 +814,7 @@ Rectangle {
 
                         Rectangle {
                             id: countPill
+
                             height: 16
                             radius: 8
                             width: countLabel.width + 12
@@ -792,6 +823,7 @@ Rectangle {
 
                             Text {
                                 id: countLabel
+
                                 anchors.centerIn: parent
                                 text: groupCard.notifs.length
                                 font.family: Services.Fonts.family
@@ -799,17 +831,20 @@ Rectangle {
                                 font.bold: true
                                 color: Services.Colors.accent
                             }
+
                         }
 
                         Text {
                             id: caret
+
                             font.family: Services.Fonts.family
                             text: ""
                             font.pixelSize: 11
                             color: Services.Colors.textMuted
                             anchors.verticalCenter: parent.verticalCenter
-                            rotation: groupCard.open ? 0 : -90   // ▼ open, ▶ closed
+                            rotation: groupCard.open ? 0 : -90 // ▼ open, ▶ closed
                         }
+
                     }
 
                     // click = expand/collapse, right-click = dismiss the
@@ -824,14 +859,15 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: (mouse) => {
                             if (mouse.button === Qt.RightButton)
-                                Services.Notifications.dismissApp(model.name)
+                                Services.Notifications.dismissApp(model.name);
                             else
-                                grpModel.setProperty(index, "expanded", !groupCard.open)
+                                grpModel.setProperty(index, "expanded", !groupCard.open);
                         }
                     }
 
                     Column {
                         id: notifsCol
+
                         anchors.top: headerRow.bottom
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -864,9 +900,9 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: (mouse) => {
                                         if (mouse.button === Qt.RightButton)
-                                            Services.Notifications.dismissNotification(modelData)
+                                            Services.Notifications.dismissNotification(modelData);
                                         else
-                                            Services.Notifications.invokeDefault(modelData)
+                                            Services.Notifications.invokeDefault(modelData);
                                     }
                                 }
 
@@ -886,6 +922,7 @@ Rectangle {
 
                                 Column {
                                     id: nTexts
+
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     // aligns under the app name (icon gutter)
@@ -902,9 +939,7 @@ Rectangle {
                                         visible: modelData.summary !== ""
                                         // urgency tints the headline: critical
                                         // pushes, low stays out of the way
-                                        color: modelData.urgency === NotificationUrgency.Critical ? Services.Colors.critical
-                                             : modelData.urgency === NotificationUrgency.Low ? Services.Colors.textMuted
-                                             : Services.Colors.text
+                                        color: modelData.urgency === NotificationUrgency.Critical ? Services.Colors.critical : modelData.urgency === NotificationUrgency.Low ? Services.Colors.textMuted : Services.Colors.text
                                         font.pixelSize: 11
                                         font.bold: true
                                     }
@@ -927,6 +962,7 @@ Rectangle {
 
                                         Row {
                                             id: chipRow
+
                                             y: 5
                                             spacing: 6
 
@@ -941,6 +977,7 @@ Rectangle {
 
                                                     Text {
                                                         id: chipLabel
+
                                                         anchors.centerIn: parent
                                                         text: modelData.text
                                                         font.family: Services.Fonts.family
@@ -951,18 +988,36 @@ Rectangle {
 
                                                     MouseArea {
                                                         id: chipArea
+
                                                         anchors.fill: parent
                                                         cursorShape: Qt.PointingHandCursor
                                                         onClicked: modelData.invoke()
                                                     }
+
                                                 }
+
                                             }
+
                                         }
+
                                     }
+
                                 }
+
                             }
+
                         }
+
                     }
+
+                    Behavior on height {
+                        SpringAnimation {
+                            spring: Services.Motion.spatialSpring
+                            damping: Services.Motion.spatialDamping
+                        }
+
+                    }
+
                 }
 
             }
@@ -985,6 +1040,12 @@ Rectangle {
         property string icon: ""
         property string label: ""
         property bool active: false
+        // Press-down scale — starts the instant the cursor is down, not
+        // on release. This alone tells you the tap landed. On release the
+        // pop spring overshoots so the tile bounces back (M3E expressive
+        // toggle), and the active state lifts the scale a touch so the
+        // flip is felt, not just seen.
+        property real pressEff: 1
 
         signal toggled()
         signal rightClicked()
@@ -993,12 +1054,6 @@ Rectangle {
         height: 64
         radius: 14
         color: tile.active ? Services.Colors.accent : Services.Colors.surface
-        // Press-down scale — starts the instant the cursor is down, not
-        // on release. This alone tells you the tap landed. On release the
-        // pop spring overshoots so the tile bounces back (M3E expressive
-        // toggle), and the active state lifts the scale a touch so the
-        // flip is felt, not just seen.
-        property real pressEff: 1
         scale: (active ? 1.04 : 1) * pressEff
 
         // Flash overlay — a brightness pulse on every click, independent
@@ -1110,6 +1165,7 @@ Rectangle {
                 spring: Services.Motion.popSpring
                 damping: Services.Motion.popDamping
             }
+
         }
 
     }

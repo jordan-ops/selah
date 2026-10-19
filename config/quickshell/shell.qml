@@ -50,6 +50,7 @@ ShellRoot{
     Bar{ barVisible: root.barVisible; onUnhideRequested: root.barVisible = true }
     TuckTabs{}         // stash strip on the screen edge — qs ipc call tuck tuck (SUPER+T)
     LockScreen{}
+    FlipClock{}      // flip clock screensaver — idle / `qs ipc call screensaver launch` (style: flip)
     AetherPicker{}   // aether wallpaper/palette overlay — qs ipc call aether toggle
     RepoUpdatePopup{}   // "a new deploy is ready" dialog — qs ipc call updates status
     EdgeLight{}      // notification edge glow — qs ipc call edgelight test

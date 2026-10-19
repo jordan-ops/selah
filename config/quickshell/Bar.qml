@@ -38,7 +38,7 @@ Variants {
         required property var modelData
         screen: modelData
         // shell.qml's barVisible (SUPER+H / `qs ipc call bar toggle`),
-        // gated on Screensaver.active (the runner's started/stopped reports).
+        // gated on Screensaver.active (runner reports + the flip clock).
         // false unmaps the layer surface entirely — Hyprland releases the
         // exclusive zone with it, so windows reflow into the freed strip.
         // The gate exists because layer-shell surfaces paint above normal
