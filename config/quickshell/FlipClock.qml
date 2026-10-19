@@ -299,14 +299,19 @@ Variants {
                 // the shell's accent, like every other accent surface
                 // here — re-themes live on every theme switch
                 color: Services.Colors.accent
-                // FIXED, deliberately not Services.Fonts: the cards are
-                // a measured fit, and set-font.sh's family could come
-                // back with uneven digit metrics (narrow 1s, odd
-                // spacing) and unbalance them. "monospace" is a
-                // fontconfig alias — always resolves, every digit the
-                // same width, immune to the font setting.
-                font.family: "monospace"
-                font.weight: Font.Bold
+                // FIXED, deliberately not Services.Fonts: the saver is
+                // a fixed appliance face, immune to set-font.sh.
+                // Archivo Black — picked by rendering candidates
+                // (Anton, Archivo Black) against Fliqlo's own promo
+                // shot: the wide slot-counter 0s and heavy flat cuts
+                // match the original closest among OFL faces, and its
+                // figures share one width so cards stay even. The TTF
+                // ships with the repo (config/quickshell/fonts/,
+                // linked into ~/.local/share/fonts by install.sh) so
+                // the clock never falls back to default sans.
+                font.family: "Archivo Black"
+                // single-weight family — Normal avoids a synthetic bold
+                font.weight: Font.Normal
                 // base = full card height, deliberately too wide: Fit
                 // then scales DOWN to the card box for any family —
                 // never depends on up-scaling behaviour

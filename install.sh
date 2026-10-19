@@ -173,6 +173,16 @@ install_packages() {
         note "fonts from the AUR: ${#aur_fonts[@]}"
         run yay -S --needed "${aur_fonts[@]}"
     fi
+
+    # The flip clock screensaver draws with one fixed OFL face (chosen
+    # against Fliqlo's own reference; see FlipClock.qml). Not in any
+    # repo — the TTF ships in the dotfiles, so link that single file
+    # in and refresh the cache. ~/.local/share/fonts stays a real dir
+    # (personal library): only this file is linked.
+    run mkdir -p "$HOME/.local/share/fonts"
+    link_one "$REPO/config/quickshell/fonts/ArchivoBlack-Regular.ttf" \
+        "$HOME/.local/share/fonts/ArchivoBlack-Regular.ttf"
+    run fc-cache -f >/dev/null 2>&1 || true
 }
 
 # Boot services. A fresh Arch install leaves these PRESET-DISABLED, so a
