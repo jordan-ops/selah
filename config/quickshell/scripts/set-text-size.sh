@@ -8,7 +8,7 @@
 #              to set-font.sh's state file when dconf is unavailable)
 #   GTK3       gtk-3.0/settings.ini gtk-font-name (first-touch .bak)
 #   kitty      kitty.conf font_size (first-touch .bak, SIGUSR1 reloads
-#              every running instance — omarchy-font-set's nudge)
+#              every running instance — the upstream tool's nudge)
 #   foot       foot.ini font= in fontconfig syntax family:size=, patched
 #              in place or added as a leading key (valid main-section
 #              position), validated with foot --check-config and rolled

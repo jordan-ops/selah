@@ -6,10 +6,11 @@
 #   install-app.sh <display-name> <packages>    non-interactive
 #   install-app.sh                              prompts for both
 #
-# Port of omarchy/bin/omarchy-install-app. omarchy wraps the install in
-# `omarchy-launch-floating-terminal-with-presentation`; here that becomes
-# `foot -e`, skipped entirely when you already have a TTY — running this
-# from your own shell should not spawn a second terminal just to prompt you.
+# Adapted from omarchy/bin/omarchy-install-app, rebranded to Selah. The
+# original wraps the install in a floating-terminal presentation helper;
+# here that becomes `foot -e`, skipped entirely when you already have a
+# TTY — running this from your own shell should not spawn a second
+# terminal just to prompt you.
 #
 # Sudo is invoked BY THIS SCRIPT, in a terminal. It needs a TTY for the
 # password, which is the entire reason this file opens one.

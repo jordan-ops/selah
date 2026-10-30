@@ -1,6 +1,6 @@
 // Ported from Nebula's modules/utils/IconUtil.qml (GPL-3.0) — qs.modules imports
 // dropped (sibling resolution in widgets/). ../../assets/ became ../assets/:
-// Nebula resolves assets/ from modules/utils/, ours sits one level above widgets/.
+// Upstream resolves assets/ from modules/utils/, ours sits one level above widgets/.
 pragma Singleton
 import QtQuick
 import Quickshell

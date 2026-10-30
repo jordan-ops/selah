@@ -160,15 +160,14 @@ hl.window_rule({
 	float = true,
 })
 
--- The Omarchy screensaver (ported to ~/.local/bin/omarchy-launch-screensaver):
--- a fullscreen float on its own special workspace. The launcher passes each
--- monitor's workspace through the exec tag; this class rule is the fallback
--- when a terminal maps again as it closes — out of sight, where its
--- fullscreen rule can't take over a normal workspace (same rules omarchy
--- ships in default/hypr/apps/system.lua).
+-- The Selah screensaver (adapted from omarchy's launcher): a fullscreen
+-- float on its own special workspace. The launcher passes each monitor's
+-- workspace through the exec tag; this class rule is the fallback when a
+-- terminal maps again as it closes — out of sight, where its fullscreen
+-- rule can't take over a normal workspace (same shape as the upstream rule).
 hl.window_rule({
 	name = "screensaver",
-	match = { class = "org.omarchy.screensaver" },
+	match = { class = "org.selah.screensaver" },
 
 	fullscreen = true,
 	float = true,

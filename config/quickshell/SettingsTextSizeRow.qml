@@ -3,8 +3,10 @@ import Quickshell
 import Quickshell.Io
 import "./services" as Services
 
-// Text-size row — the renderer's `textsize` row type: the slider's
-// track/handle/readout language, but the value lives OUTSIDE hyprland.
+// Text-size row — the renderer's `textsize` row type: the control is
+// SettingsFrostSlider (the widget studio's M3Slider behind a
+// display-unit facade), so the settings window and the widget editor
+// share one slider language, and the value lives OUTSIDE hyprland.
 // Reads the live px from the trailing number of gsettings font-name
 // (set-text-size.sh's state file is the fallback for a session where
 // dconf is unavailable, else the 11 default), commits on RELEASE to
@@ -33,6 +35,9 @@ Item {
     property real live: 11
     property real pending: 11
     property bool dragging: false
+    // ready = the async gsettings read has landed — until then the
+    // slider stays invisible (layout reserved) instead of flashing 11
+    property bool ready: false
     readonly property real shown: dragging ? pending : live
     readonly property real extraHeight: previewSample.height + 8   // sample line grows the row
 
@@ -74,6 +79,9 @@ Item {
             onStreamFinished: {
                 const m = String(text).trim().match(/(\d+)\s*'?$/)
                 if (m) root.live = root.clamp(parseFloat(m[1]))
+                // read settled either way — reveal the control (an empty
+                // read keeps the 11 default rather than an invisible row)
+                root.ready = true
             }
         }
     }
@@ -82,61 +90,30 @@ Item {
         onExited: rd.running = true
     }
 
-    // track / fill / handle / readout — SettingsSliderRow's visuals verbatim
+    // track / handle / readout — SettingsFrostSlider, the same control
+    // SettingsSliderRow uses (moved = live drag preview into `pending`
+    // and the sample line, committed = release → the write path above)
     Row {
         anchors.top: parent.top
         width: parent.width
         height: 30
         spacing: 10
 
-        Item {
-            id: trackBox
+        SettingsFrostSlider {
+            id: frost
             width: parent.width - readout.width - parent.spacing
             height: parent.height
-
-            Rectangle {
-                id: track
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width
-                height: 6
-                radius: 3
-                color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g, Services.Colors.text.b, 0.15)
-
-                Rectangle {
-                    width: track.width * (root.shown - root.min) / Math.max(1, root.max - root.min)
-                    height: parent.height
-                    radius: 3
-                    color: Services.Colors.accent
-                    Behavior on width { SpringAnimation { spring: Services.Motion.bounceSpring; damping: Services.Motion.bounceDamping } }
-                }
-
-                Rectangle {
-                    id: handle
-                    x: (track.width - width) * (root.shown - root.min) / Math.max(1, root.max - root.min)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 14
-                    height: 14
-                    radius: 7
-                    color: Services.Colors.accent
-                    border.color: Services.Colors.background
-                    border.width: 2
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -8          // generous grab zone
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: mouse => beginDrag(mouse.x)
-                    onPositionChanged: mouse => { if (pressed) beginDrag(mouse.x) }
-                    onReleased: root.commit(root.pending)
-
-                    function beginDrag(x) {
-                        const norm = Math.max(0, Math.min(1, x / track.width))
-                        root.dragging = true
-                        root.pending = root.snap(root.min + norm * (root.max - root.min))
-                    }
-                }
+            value: root.shown
+            from: root.min
+            to: root.max
+            step: root.step
+            suffix: root.suffix
+            disabled: !root.enabled || !root.ready
+            onMoved: v => {
+                root.dragging = true
+                root.pending = root.snap(v)
             }
+            onCommitted: v => root.commit(v)
         }
 
         Text {
@@ -151,6 +128,11 @@ Item {
             font.bold: true
         }
     }
+
+    // Before the gsettings read lands, the control zone stays invisible
+    // (layout is reserved, so nothing shifts when it appears)
+    opacity: root.ready ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 120 } }
 
     // THE PREVIEW — the row's own sample line tracks the dragged value
     // instantly (real writes stay release-only), so moving the slider has

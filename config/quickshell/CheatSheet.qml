@@ -186,7 +186,7 @@ Variants {
                     width: flick.width
                     spacing: 34
                     // binds.lua carries a handful of sections, so one column
-                    // each (no Nebula-style height balancing needed)
+                    // each (no cross-column height balancing needed)
                     readonly property int n: Math.max(1, Services.Keybinds.groups.length)
                     readonly property real colWidth: (width - spacing * (n - 1)) / n
 

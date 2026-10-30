@@ -30,7 +30,7 @@ ShellRoot{
     }
 
     Background{}
-    // Nebula widget layer — Settings ▸ Widgets, or `qs ipc call widgets edit`
+    // The widget layer (widgets/) — Settings ▸ Widgets, or `qs ipc call widgets edit`
     // for arrange mode. active = the master switch (SettingsConfig.widgets
     // blob, fed by the flat widgets.* store keys the settings app writes);
     // visible drops the surface during GameMode, the same quiet-gate the
@@ -54,6 +54,7 @@ ShellRoot{
     AetherPicker{}   // aether wallpaper/palette overlay — qs ipc call aether toggle
     RepoUpdatePopup{}   // "a new deploy is ready" dialog — qs ipc call updates status
     EdgeLight{}      // notification edge glow — qs ipc call edgelight test
+    VoiceWave{}      // voice recording capsule (blob + live mic waveform) — services/VoiceRec, SUPER+D
     ThemeFlip{}      // frozen-frame theme-switch reveal — qs ipc call themeflip test
     CheatSheet{}     // keybinding cheat sheet — qs ipc call cheatsheet toggle (SUPER + /)
     Overview{}       // layout overview / floor-plan — qs ipc call overview toggle (SUPER + TAB)

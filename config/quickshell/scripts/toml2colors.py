@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Derive quickshell's colors.json (md3 keys) from an omarchy colors.toml.
+"""Derive quickshell's colors.json (md3 keys) from a theme's colors.toml.
 
-omarchy themes are flat palettes (background / foreground / accent / muted /
+Selah themes are flat palettes (background / foreground / accent / muted /
 dark_background / lighter_background / selection / red ...), while
 services/Colors.qml reads md3.background, md3.surface_variant,
 md3.secondary_container, md3.primary, md3.on_background,
 md3.on_surface_variant, md3.error, md3.outline.
 
 This maps one to the other with fallback chains so themes missing the
-optional omarchy keys still produce a complete file.
+optional theme keys still produce a complete file.
 
 Usage: toml2colors.py <colors.toml> <colors.json>
 """

@@ -160,7 +160,7 @@ Item {
                             // Card art, in order:
                             //   1. the per-theme screenshot from
                             //      scripts/generate-previews.sh (scratch workspace
-                            //      with neovim + btop open) — only the omarchy
+                            //      with neovim + btop open) — only the bundled
                             //      themes have one;
                             //   2. the theme's OWN wallpaper, for themes that have
                             //      never been shot (everything aether creates), so

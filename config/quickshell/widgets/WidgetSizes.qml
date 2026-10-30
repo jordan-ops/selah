@@ -44,7 +44,7 @@ Singleton {
     }
 
     // matches the shell's resting corner (SettingsWindow shapeR: 16) —
-    // Nebula's 24 read too bubbly against this config's geometry
+    // upstream's 24 read too bubbly against this config's geometry
     readonly property int radius: 16
     function padFor(w) { return w <= span(2) + 1 ? 16 : 20 }
     function nestedRadius(w) { return Math.max(6, radius - padFor(w)) }

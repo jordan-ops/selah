@@ -1,8 +1,27 @@
 [[entry]]
-played_at = "2026-10-19T03:01:56Z"
+played_at = "2026-10-28T04:02:15Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
 genre = "pop"
+
+[[entry]]
+played_at = "2026-10-22T09:30:28Z"
+path = "https://stream.revma.ihrhls.com/zc1629"
+title = "100.3 KISS FM"
+genre = "pop,top 40"
+
+[[entry]]
+played_at = "2026-10-22T07:27:24Z"
+path = "https://stream.revma.ihrhls.com/zc4864"
+title = "101.9 KISS FM"
+genre = "pop,top 40"
+
+[[entry]]
+played_at = "2026-10-22T07:18:39Z"
+path = "https://radio.cliamp.stream/lofi/tracks/8ad369a0c92a852e"
+title = "it's perfect weather for a trip to the café, don't you think-"
+artist = "AvapXia"
+album = "summer lofi"
 
 [[entry]]
 played_at = "2026-10-19T03:01:48Z"
@@ -66,12 +85,6 @@ played_at = "2026-10-12T14:13:56Z"
 path = "https://streaming.live365.com/a01484"
 title = "Funk the Planet [192k] · United States Of America"
 genre = "classic hip hop,contemporary r&b,disco funk,funk,future funk,hip hop,hip-hop,hip-hop and rap oldies,hiphop,hiphop r&b,jazz funk,neo soul,new jack swing,p-funk,r&b,r&b soul,r&b/urban,retro r&b,soul,soul music"
-
-[[entry]]
-played_at = "2026-10-11T13:48:37Z"
-path = "https://stream.revma.ihrhls.com/zc1629"
-title = "100.3 KISS FM"
-genre = "pop,top 40"
 
 [[entry]]
 played_at = "2026-10-09T19:03:14Z"

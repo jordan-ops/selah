@@ -28,7 +28,7 @@ Singleton {
     // theme name -> its screenshot thumbnail, and -> its wallpaper. Both are
     // resolved by the scan below rather than guessed in QML:
     //   · the screenshot only exists for themes that have been through
-    //     scripts/generate-previews.sh (the omarchy ones) — everything
+    //     scripts/generate-previews.sh (the inherited ones) — everything
     //     aether creates has none, which is why those cards used to fall
     //     straight to the palette stripes;
     //   · the wallpaper's extension follows whatever the source file was

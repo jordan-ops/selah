@@ -1,7 +1,7 @@
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names SysForecastWidget binds on (buckets/bucketCount/
 // currentAvg/label/retain/release), backed by this shell's own
-// ServiceSystemInfo adapter — no Nebula backend travels with us.
+// ServiceSystemInfo adapter — no upstream backend travels with us.
 //
 // Ported from Nebula's services/ServiceSysHistory.qml (GPL-3.0) — qs.modules
 // imports dropped (sibling resolution in widgets/).

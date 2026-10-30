@@ -350,7 +350,7 @@ Item {
                             clip: true
                             color: Services.Colors.text
                             font.pixelSize: 12
-                            selectionColor: Services.Colors.accent
+                            selectionColor: Services.Colors.accentSurface
                             onTextChanged: if (text !== root.filter) root.filter = text
 
                             Text {
@@ -403,7 +403,7 @@ Item {
                             clip: true
                             color: Services.Colors.text
                             font.pixelSize: 12
-                            selectionColor: Services.Colors.accent
+                            selectionColor: Services.Colors.accentSurface
                             text: root.addChord
                             onTextChanged: if (text !== root.addChord) root.addChord = text
 
@@ -438,7 +438,7 @@ Item {
                             clip: true
                             color: Services.Colors.text
                             font.pixelSize: 12
-                            selectionColor: Services.Colors.accent
+                            selectionColor: Services.Colors.accentSurface
                             text: root.addCmd
                             onTextChanged: if (text !== root.addCmd) root.addCmd = text
 
@@ -474,7 +474,7 @@ Item {
                             clip: true
                             color: Services.Colors.text
                             font.pixelSize: 12
-                            selectionColor: Services.Colors.accent
+                            selectionColor: Services.Colors.accentSurface
                             text: root.addDesc
                             onTextChanged: if (text !== root.addDesc) root.addDesc = text
 

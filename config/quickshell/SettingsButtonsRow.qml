@@ -61,6 +61,18 @@ Item {
         }
     }
 
+    // per-row reset affordance in the window's row delegate — pick the
+    // catalog default's option and run the same apply path it would
+    function resetToDefault() {
+        if (!root.e || root.e.default === undefined) return
+        const opts = root.e.options || []
+        for (let i = 0; i < opts.length; i++)
+            if (String(opts[i].value) === String(root.e.default)) {
+                root.apply(opts[i])
+                return
+            }
+    }
+
     Component.onCompleted: read()
 
     // Revert evaled baselines back — re-read so the highlighted chip
@@ -70,7 +82,16 @@ Item {
         function onRevertDone() { if (!rd.running) root.read() }
     }
 
-    Process { id: wr }
+    Process {
+        id: wr
+        // eval failure (nonzero exit) — same honest toast as the switch
+        onExited: (exitCode) => {
+            if (exitCode !== 0)
+                SettingsToast.push("«" + (root.e && root.e.label ? root.e.label
+                                           : "Setting")
+                                   + "» — hyprctl eval failed", true)
+        }
+    }
     Process {
         id: act
         onExited: root.read()
@@ -110,6 +131,9 @@ Item {
                 color: selected ? Services.Colors.accent
                     : (chipMouse.containsMouse ? Services.Colors.surfaceAlt
                                                : Services.Colors.surface)
+                Accessible.role: Accessible.Button
+                Accessible.name: (root.e && root.e.label ? root.e.label : "Option")
+                    + ": " + modelData.label
 
                 Behavior on color {
                     ColorAnimation {

@@ -1,5 +1,5 @@
 // Ported from Nebula's Widgets/WidgetCatalog.qml (GPL-3.0), curated for
-// this shell: sections and items that ran on Nebula's own backends or
+// this shell: sections and items that ran on upstream's own backends or
 // feeds we don't ship (personal stats, PhotoFrame/Profile, Headlines,
 // Claude Code, Lyrics, Spectrum/cava, Day Ribbon) are gone — everything
 // here runs on our services (Vitals, Battery, Media, Weather, Tasks,

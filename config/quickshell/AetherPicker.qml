@@ -13,7 +13,7 @@
 //   · Two explicit actions instead of one hidden Enter: Create, and
 //     Create + apply (the default, what Enter runs).
 //
-// What replaced the omarchy plugin host: `manifest.json` + shell.toggle/hide
+// What stands in for a plugin host here: `manifest.json` + shell.toggle/hide
 // became this file's own PanelWindow driven by `qs ipc call aether`, and
 // `Color.*` became this setup's Services.Colors.
 //

@@ -10,8 +10,8 @@ import "./services" as Services
 // the BAR PILL — geometry published live by Bar.qml through
 // services/BarMetrics — when a notification lands, then destroys itself.
 // Selah already shows the notification text in the pill itself, so this
-// is the glow ONLY — no title/body pill of its own (Nebula's pill is
-// dropped).
+// is the glow ONLY — no title/body pill of its own (the original's pill
+// is dropped).
 //
 // Gates, in order: motion off = no decoration at all, GameMode = none,
 // DoNotDisturb = none — except criticals, which exist precisely to break
@@ -86,7 +86,7 @@ Scope {
             WlrLayershell.namespace: "selah-edgelight"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-            // Nebula's timing kept (2.4s, 45% wash, two turns); band and
+            // Timing kept from the port (2.4s, 45% wash, two turns); band and
             // bleed retuned for the pill scale — a 70px screen-edge glow
             // swamps a 54px-tall pill.
             readonly property real thick: 4

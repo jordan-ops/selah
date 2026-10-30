@@ -94,7 +94,7 @@ WidgetHost {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     CustomText {
-                        content: "NEBULA · RIGHT NOW"
+                        content: "SELAH · RIGHT NOW"
                         size: 12
                         weight: 700
                         font.letterSpacing: 1.4

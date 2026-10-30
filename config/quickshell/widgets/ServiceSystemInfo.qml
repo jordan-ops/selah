@@ -6,15 +6,15 @@ import "../services" as Services
 
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names the widget files bind on, backed by this shell's own
-// services — no Nebula C++ SystemStats plugin travels with us.
+// services — no upstream C++ SystemStats plugin travels with us.
 //
 // Aggregates (cpu/mem %, rx/tx) come from services/Vitals so the control
-// center and the widgets can never disagree. The extras Nebula's C++ plugin
+// center and the widgets can never disagree. The extras the upstream C++ plugin
 // carried — per-core jiffies, meminfo totals, CPU temp, disk, GPU — are
 // sampled here by one bash loop that only runs while a widget retains the
 // service (widgets call retain()/release() on mount/unmount, exactly like
 // upstream's refcount). Usage values are 0..1 fractions, matching
-// Nebula's stats surface; temps are °C; bytes are raw.
+// upstream's stats surface; temps are °C; bytes are raw.
 Singleton {
     id: root
 
@@ -24,7 +24,7 @@ Singleton {
     readonly property real netDownloadBps: Services.Vitals.rx
     readonly property real netUploadBps: Services.Vitals.tx
     // string surface for display: our Network service's `name` (SSID or
-    // device name, "Offline" when disconnected) — Nebula's raw interface
+    // device name, "Offline" when disconnected) — the upstream raw interface
     // name has no consumer in the ported set
     readonly property string netInterface: Services.Network.name
 

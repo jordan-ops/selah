@@ -1,6 +1,6 @@
 #!/bin/sh
-# Idle timeout store for the settings app — ~/.config/omarchy/shell.json
-# ("idle": { "screensaver": 150, "lock": 300, "sleep": 1800 }).
+# Idle timeout store for the settings app — ~/.config/selah/shell.json
+# ("idle": { "screensaver": 300, "lock": 600, "sleep": 1800 }).
 #
 # There is no jq on this box, so python3 does the JSON edit: temp file in
 # the same directory, then rename (atomic), indent 2 so the diff against
@@ -14,7 +14,7 @@ usage() { echo "Usage: set-idle.sh get|set <screensaver|lock|sleep> [seconds]" >
 [ $# -ge 2 ] || usage
 MODE=$1
 KEY=$2
-F="$HOME/.config/omarchy/shell.json"
+F="$HOME/.config/selah/shell.json"
 
 case "$KEY" in
   screensaver|lock|sleep) ;;

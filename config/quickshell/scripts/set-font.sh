@@ -1,10 +1,10 @@
 #!/bin/sh
-# set-font.sh <family> [size] — the local equivalent of omarchy-font-set,
-# for the mechanisms that actually exist on THIS machine:
+# set-font.sh <family> [size] — Selah's font setter, covering the
+# mechanisms that actually exist on THIS machine:
 #
 #   fontconfig  ~/.config/fontconfig/fonts.conf  (canonical: the shell,
 #               Qt apps and anything resolving sans-serif/monospace read
-#               here — same prepend_first trick omarchy uses)
+#               here — the same prepend_first trick the original uses)
 #   GTK/GNOME   gsettings org.gnome.desktop.interface font-name,
 #               document-font-name, monospace-font-name
 #               (+ gtk-font-name patched into gtk-3.0/settings.ini)
@@ -87,7 +87,7 @@ if [ -f "$INI4" ]; then
 fi
 
 # ---- kitty — single value, in place, first-touch .bak, nudge running
-# instances the way omarchy-font-set does (SIGUSR1 reloads the config)
+# instances the way the upstream tool does (SIGUSR1 reloads the config)
 KITTY="$HOME/.config/kitty/kitty.conf"
 if [ -f "$KITTY" ]; then
   if [ ! -f "$KITTY.bak" ]; then cp -p "$KITTY" "$KITTY.bak"; fi

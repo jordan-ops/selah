@@ -3,10 +3,14 @@ import Quickshell.Io
 import "./services" as Services
 
 // Right-aligned slider for one Hyprland numeric option — the renderer's
-// `slider` row type. Same track/fill/handle language as QSSlider and
-// the window's chips; reads the live value once with hyprctl getoption,
-// writes ONLY when the drag ends (omasettings' NumberRow rule: a write
-// takes a state refresh to come back, so mid-drag writes fight the read).
+// `slider` row type. The control itself is SettingsFrostSlider (the
+// widget studio's M3Slider behind a display-unit facade), so the
+// settings window and the widget editor share one slider language;
+// reads the live value once with hyprctl getoption, writes ONLY when
+// the drag ends (omasettings' NumberRow rule: a write takes a state
+// refresh to come back, so mid-drag writes fight the read). Until that
+// first read lands the control stays invisible — no flash of `min`
+// that then jumps to the real value.
 // `e.scale` maps display units to the stored value (percent rows show
 // 50–100 while hyprland holds 0.5–1.0).
 //
@@ -35,10 +39,13 @@ Item {
     // live = what hyprland holds (in display units); pending = where the
     // finger is. The row shows pending while dragging, live otherwise.
     // lives = the raw per-key stored values (revert baselines).
+    // ready = the first hyprctl read has landed (async) — until then
+    // the control renders at 0 opacity instead of flashing `min`.
     property real live: min
     property var lives: []
     property real pending: min
     property bool dragging: false
+    property bool ready: false
     readonly property real shown: dragging ? pending : live
     readonly property real extraHeight: 0   // sliders never grow the row
 
@@ -109,64 +116,38 @@ Item {
                 }
                 root.lives = lives
                 if (primary !== null) root.live = root.clamp(primary / root.sc)
+                // first read landed — reveal the slider (also covers a
+                // parse miss: show the clamped default rather than an
+                // invisible row that never comes back)
+                root.ready = true
             }
         }
     }
     Process { id: writeProc }
 
+    // SettingsFrostSlider (the studio's M3Slider) in the same track
+    // area the hand-rolled slider had — same 214x30 outer footprint,
+    // same readout on the right; moved = live drag preview (updates
+    // `pending`), committed = release → the row's write path
     Row {
         anchors.fill: parent
         spacing: 10
 
-        // track — 6px pill, accent fill, 14px handle (M3 slider)
-        Item {
-            id: trackBox
+        SettingsFrostSlider {
+            id: frost
             width: parent.width - readout.width - parent.spacing
             height: parent.height
-
-            Rectangle {
-                id: track
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width
-                height: 6
-                radius: 3
-                color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g, Services.Colors.text.b, 0.15)
-
-                Rectangle {
-                    width: track.width * (root.shown - root.min) / Math.max(1, root.max - root.min)
-                    height: parent.height
-                    radius: 3
-                    color: Services.Colors.accent
-                    Behavior on width { SpringAnimation { spring: Services.Motion.bounceSpring; damping: Services.Motion.bounceDamping } }
-                }
-
-                Rectangle {
-                    id: handle
-                    x: (track.width - width) * (root.shown - root.min) / Math.max(1, root.max - root.min)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 14
-                    height: 14
-                    radius: 7
-                    color: Services.Colors.accent
-                    border.color: Services.Colors.background
-                    border.width: 2
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -8          // generous grab zone
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: mouse => beginDrag(mouse.x)
-                    onPositionChanged: mouse => { if (pressed) beginDrag(mouse.x) }
-                    onReleased: root.commit(root.pending)
-
-                    function beginDrag(x) {
-                        const norm = Math.max(0, Math.min(1, x / track.width))
-                        root.dragging = true
-                        root.pending = root.snap(root.min + norm * (root.max - root.min))
-                    }
-                }
+            value: root.shown
+            from: root.min
+            to: root.max
+            step: root.step
+            suffix: root.suffix
+            disabled: !root.enabled || !root.ready
+            onMoved: v => {
+                root.dragging = true
+                root.pending = root.snap(v)
             }
+            onCommitted: v => root.commit(v)
         }
 
         Text {
@@ -181,4 +162,9 @@ Item {
             font.bold: true
         }
     }
+
+    // Before the first hyprctl read lands, the whole control zone stays
+    // invisible (layout is reserved, so nothing shifts when it appears)
+    opacity: root.ready ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 120 } }
 }

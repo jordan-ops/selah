@@ -1,6 +1,6 @@
 // Ported from Nebula's customComponents/RippleEffect.qml (GPL-3.0) — module
 // imports dropped (the kit now lives beside its users in widgets/) and
-// answers to widgets/Colors + widgets/SettingsConfig, which speak Nebula's
+// answers to widgets/Colors + widgets/SettingsConfig, which speak the ported kit's
 // palette/config names from this shell's theme and store.
 import QtQuick
 import QtQuick.Effects
@@ -89,7 +89,7 @@ Item {
         NumberAnimation {
             target: _ripple; properties: "width,height"
             to: _anim.r * 2
-            // upstream read Nebula's Appearance.duration singleton (not ported);
+            // upstream read its Appearance.duration singleton (not ported);
             // 300/100 are its normal/small values
             duration: 300
             easing.type: Easing.OutCubic

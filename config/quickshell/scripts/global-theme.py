@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Global theming — omarchy-style app coordination for this quickshell setup.
+"""Global theming — coordinated app retinting for this quickshell setup.
 
-Ports the user-session half of omarchy's post-theme hooks to switch-theme.sh:
+Adapted from omarchy's post-theme hooks (the user-session half),
+rebranded to Selah; each upstream hook maps onto switch-theme.sh as:
 
-  * omarchy-theme-set-gnome   -> gsettings color-scheme / gtk-theme / icon-theme
-  * (nwg-look equivalent)     -> gtk-3.0 + gtk-4.0 settings.ini
-  * omarchy-theme-set-foot    -> generated foot.ini + live OSC to running footes
-  * kitty.conf.tpl            -> generated current-theme.conf (+ include shim)
-  * omarchy-theme-set-browser -> staged browser-color.json + best-effort push
-                                 to /etc/chromium/policies/managed/color.json
-  * firefox                   -> profile userChrome.css + userContent.css and
-                                 the three prefs that switch them on (no policy
-                                 hook exists for Gecko, so this is profile-level)
-  * yaru folders              -> ~/.local/share/icons/quickshell-folders, an
-                                 icon theme inheriting the theme's Yaru variant
-                                 whose folder art is tinted to its accent
+  * gnome hook             -> gsettings color-scheme / gtk-theme / icon-theme
+  * (nwg-look equivalent)  -> gtk-3.0 + gtk-4.0 settings.ini
+  * foot hook              -> generated foot.ini + live OSC to running footes
+  * kitty.conf.tpl         -> generated current-theme.conf (+ include shim)
+  * browser hook           -> staged browser-color.json + best-effort push
+                              to /etc/chromium/policies/managed/color.json
+  * firefox                -> profile userChrome.css + userContent.css and
+                              the three prefs that switch them on (no policy
+                              hook exists for Gecko, so this is profile-level)
+  * yaru folders           -> ~/.local/share/icons/quickshell-folders, an
+                              icon theme inheriting the theme's Yaru variant
+                              whose folder art is tinted to its accent
 
 Everything user-session runs directly; the /etc policy write tries a direct
 write, then `sudo -n` (the passwordless helper one-time-root-setup.sh installs),
@@ -67,7 +68,7 @@ DRY = "--dry-run" in sys.argv
 
 
 # ---------------------------------------------------------------- palette ---
-# Port of omarchy-theme-color's resolution cascade: semantic names are
+# Port of the upstream color-resolution cascade: semantic names are
 # canonical, ANSI colorN aliases fill gaps, brights default to a 20% white
 # mix, mode falls back to background luminance (same >382 sum threshold).
 
@@ -82,7 +83,7 @@ def mix(start: str, end: str, amount: float) -> str:
     return "#" + "".join(f"{c:02x}" for c in out)
 
 
-ANSI = {  # colorN -> semantic key (omarchy's ansi_alias table)
+ANSI = {  # colorN -> semantic key (the upstream ansi_alias table)
     "color0": "background", "color1": "red", "color2": "green",
     "color3": "yellow", "color4": "blue", "color5": "magenta",
     "color6": "cyan", "color7": "foreground", "color8": "muted",
@@ -109,7 +110,7 @@ def resolve(raw: dict) -> dict:
                                      mix(p["magenta"], "#ffffff", 0.20)
                                      if "magenta" in p else "#bb9af7"))
 
-    # brights default to 20% white (omarchy derivation)
+    # brights default to 20% white (upstream derivation)
     for base in ("red", "yellow", "green", "cyan", "blue"):
         key = f"bright_{base}"
         if key not in p and base in p:
@@ -177,7 +178,7 @@ def hex_strip(c: str) -> str:
 # ------------------------------------------------------------------- foot ----
 
 def foot_ini(p: dict) -> str:
-    """Generated foot palette — omarchy's foot.ini.tpl values.
+    """Generated foot palette — the upstream foot template's values.
 
     This foot build (1.28) rejects the classic [colors] section outright
     (check-config exit 230) and only accepts the scheme-conditional
@@ -284,7 +285,7 @@ def foot_config_ok(content: str) -> bool:
 
 
 def foot_osc(p: dict) -> bytes:
-    """omarchy-theme-osc port: fg/bg/cursor/selection + the 16 ANSI slots."""
+    """Upstream OSC-push port: fg/bg/cursor/selection + the 16 ANSI slots."""
     out = b""
 
     def osc(code: str, value: str):
@@ -304,7 +305,7 @@ def foot_osc(p: dict) -> bytes:
 
 
 def running_foot_ttys():
-    """TTYs of shells running inside foot — omarchy-theme-set-foot's loop:
+    """TTYs of shells running inside foot — the upstream foot hook's loop:
     foot pid -> children -> fd/1 pointing at a pts."""
     ttys = set()
     pids = [int(d) for d in os.listdir("/proc") if d.isdigit()]
@@ -424,7 +425,7 @@ def apply_chromium(p: dict):
         else:
             log("chromium policy", "not pushed (no root yet)")
 
-    # refresh a running browser the way omarchy does
+    # refresh a running browser the way the upstream hook does
     if subprocess.run(["pgrep", "-x", "chromium"], capture_output=True).returncode == 0:
         subprocess.Popen(
             ["chromium", "--refresh-platform-policy", "--no-startup-window"],
@@ -1139,7 +1140,7 @@ def gtk_theme_name(p: dict, current: str) -> str:
     (adw-gtk3, Yaru-sage, …) stays the theme across switches; only the
     light/dark variant follows each quickshell theme's mode
     (adw-gtk3 <-> adw-gtk3-dark), guarded on the directory existing.
-    Nothing custom configured -> omarchy's stock Adwaita/Adwaita-dark."""
+    Nothing custom configured -> the stock Adwaita/Adwaita-dark."""
     if current:
         base = current[:-5] if current.endswith("-dark") else current
         if base and base not in ("Adwaita", "Default"):
@@ -1151,7 +1152,7 @@ def gtk_theme_name(p: dict, current: str) -> str:
 
 
 def apply_gsettings(p: dict, icons: str, have_icons: bool):
-    """omarchy-theme-set-gnome port: scheme + icons per theme; GTK theme =
+    """Upstream gnome-hook port: scheme + icons per theme; GTK theme =
     the user's sticky choice flipped to this theme's mode. `icons` is the
     folder-colour overlay when one was built, else the theme's plain variant —
     `have_icons` says whether either actually exists to be applied."""
@@ -1282,7 +1283,7 @@ def gtk_color_map(p: dict) -> dict:
         "theme_selected_bg_color": accent,
         "theme_selected_fg_color": on(accent),
     }
-    # semantics (guarded — every omarchy theme ships the palette, but don't crash)
+    # semantics (guarded — every Selah theme ships the palette, but don't crash)
     for prefix, key in (("error", "red"), ("destructive", "red"),
                         ("success", "green"), ("warning", "yellow")):
         c = g(key)
@@ -1382,7 +1383,7 @@ def hypr_border_value(spec: str) -> str:
     """colors.toml border spec -> Lua value for hl.config. Single color
     stays a quoted string; a gradient becomes { colors = {..}, angle = N }
     (the Lua API rejects multi-color strings — probe-verified). Mirrors
-    omarchy's hypr_gradient helper in omarchy-theme-set-templates."""
+    the upstream hypr_gradient helper in the theme-template hook."""
     colors = re.findall(r"rgba?\([0-9a-fA-F]+\)", spec or "")
     if len(colors) <= 1:
         return f'"{spec}"'
@@ -1394,7 +1395,8 @@ def hypr_border_value(spec: str) -> str:
 def apply_hyprland(p: dict, raw: dict):
     """Generate ~/.config/hypr/colors.lua — hyprland.lua require()s it last
     (pcall), hl.config deep-merges into appearance.lua, and switch-theme.sh
-    hyprctl-reloads after this script. Mirrors omarchy's hyprland.lua.tpl:
+    hyprctl-reloads after this script. Mirrors the upstream hyprland
+    template:
     per-theme hyprland_active/inactive_border keys win when shipped, else
     accent->cyan45 gradient + muted grey; group borders track the same and
     the window shadow tints toward the theme background."""
@@ -1411,7 +1413,7 @@ def apply_hyprland(p: dict, raw: dict):
 
     log("hyprland borders", f"active {active}  inactive {inactive}")
     body = f"""-- quickshell theme colors: {THEME_DIR.name} (generated by switch-theme.sh — do not edit)
--- omarchy's hyprland_* keys win when the theme ships them; fallback is an
+-- the theme's own hyprland_* keys win when it ships them; fallback is an
 -- accent->cyan gradient and muted grey. hyprland.lua require()s this file
 -- last; hl.config deep-merges over appearance.lua (probe-verified).
 hl.config({{

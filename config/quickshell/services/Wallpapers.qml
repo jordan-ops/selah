@@ -133,7 +133,7 @@ Singleton {
     }
 
     // switch-theme.sh's default rule, mirrored: default.* if the theme has
-    // one, else first of the sorted scan (omarchy: sort | head -1).
+    // one, else first of the sorted scan (same as the original: sort | head -1).
     function pickDefault() {
         for (let i = 0; i < root.wallpapers.length; i++) {
             const base = root.wallpapers[i].split("/").pop().toLowerCase()
@@ -143,7 +143,7 @@ Singleton {
     }
 
     // first run: no state file yet — adopt the active theme's default,
-    // same spirit as omarchy's upgrade script bootstrapping its
+    // same spirit as the original upgrade script bootstrapping its
     // background symlink from the theme's backgrounds folder.
     function maybeBootstrap() {
         if (!root.stateLoaded || root.current !== "") return

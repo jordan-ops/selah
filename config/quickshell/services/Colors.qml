@@ -30,7 +30,26 @@ Singleton {
     readonly property color textMuted: root.ensureContrast(
         md3.on_surface_variant || "#aaaaaa", 3.0)
 
-    function ensureContrast(c: color, min: real): color {
+    // SOLID ACCENT SURFACES THAT CARRY TEXT — the launcher's selection
+    // pill, the delete-confirm buttons, text-selection highlights. A
+    // theme is free to derive primary == on_background — kanagawa
+    // ships #dcd7ba for BOTH — which paints the label in exactly the
+    // highlight's color and the text vanishes. This is the accent with
+    // its hue kept, shifted toward black or white (whichever reaches
+    // the floor in the fewer steps) until `text` sits on it at >= 4.5:1
+    // — WCAG AA for the normal-size launcher names. Themes where the
+    // label already clears the floor get the raw accent back,
+    // byte-identical. Decorative accents (dots, rails, OSD fills) that
+    // carry NO text keep plain `accent`.
+    readonly property color accentSurface: root.contrastAgainst(
+        accent, text, 4.5)
+
+    // c shifted toward white or black until it clears `min` against
+    // `bg` (WCAG relative-luminance ratio). Both directions are tried
+    // and the smaller step wins: on a near-black bg only lightening
+    // can reach the floor (darkening caps at bg/0.05), so choosing by
+    // fg-vs-bg side would pick the dead end.
+    function contrastAgainst(c: color, bg: color, min: real): color {
         const relLum = (x) => {
             const lin = (v) => v <= 0.04045 ? v / 12.92
                                              : Math.pow((v + 0.055) / 1.055, 2.4)
@@ -40,12 +59,8 @@ Singleton {
             const la = relLum(a), lb = relLum(b)
             return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
         }
-        const bg = root.background
         if (ratio(c, bg) >= min)
             return c
-        // Both directions are tried: on a near-black background only
-        // lightening can reach the floor (darkening caps at bg/0.05),
-        // so picking by fg-vs-bg side would choose the dead end.
         const seek = (target) => {
             for (let t = 0.05; t <= 1.0001; t += 0.05) {
                 const mixed = Qt.rgba(c.r + (target.r - c.r) * t,
@@ -63,6 +78,12 @@ Singleton {
         if (up) return up.color
         if (down) return down.color
         return c   // unreachable floor (background sits at ~0 contrast)
+    }
+
+    // historical name — textMuted floors against the shell background;
+    // same machinery as contrastAgainst with `bg` pinned to it
+    function ensureContrast(c: color, min: real): color {
+        return contrastAgainst(c, root.background, min)
     }
 
     // alias — several components call Services.Colors.text_muted

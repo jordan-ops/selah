@@ -47,10 +47,16 @@ Singleton {
         "clock.h": 280,
         "clock.format": "hh:mm AP - MM/dd",
         "clock.glow": true,
-        // the Nebula widget layer (widgets/): ON by default so a fresh
+        // our widget layer (widgets/): ON by default so a fresh
         // install shows nothing yet (every show* family key is unset =
         // off) but the studio and quick-add are reachable immediately
-        "widgets.showWidgets": true
+        "widgets.showWidgets": true,
+        // the voice assistant (SUPER+D dictation + spoken replies) —
+        // OFF until turned on in Settings ▸ Audio, because first enable
+        // downloads the speech engine (~215 MB of whisper/piper models
+        // plus a pacman ask for whisper-cpp). Nothing about voice runs
+        // or is fetched while this sits false.
+        "voice.enabled": false
     })
 
     // typed accessor for keys the shell binds on — one line per new key
@@ -90,6 +96,11 @@ Singleton {
     // which lock layout lock/ draws — written by Settings ▸ Lock screen,
     // read live by LockScreen's Loader. Unknown values fall back to the
     // original layout rather than to a blank lock surface.
+    // Voice assistant master switch (Settings ▸ Audio ▸ Voice card);
+    // selah-voice reads the same key straight out of settings.json and
+    // stays completely inert while it's false.
+    readonly property bool voiceEnabled:
+        values["voice.enabled"] === true || values["voice.enabled"] === "true"
     readonly property string lockStyle: {
         const v = String(values["lock.style"] || "")
         return ["classic", "card", "minimal", "magazine", "clock"].indexOf(v) >= 0
@@ -156,30 +167,61 @@ Singleton {
         next[key] = parsed
         root.values = next   // reassign = one notification for every binding
 
-        writeProc.command = ["bash", "-c",
-            'printf %s "$1" > "$2"', "qs",
-            JSON.stringify(next), root.path]
-        writeProc.running = true
+        const delta = {}
+        delta[key] = parsed
+        queueWrite(delta)
     }
 
     // Several keys in ONE write — the drag/resize exit of the desktop
-    // clock commits x/y/w/h together, and four set() calls in a row would
-    // race the same writeProc (the 2nd..4th `running = true` land while
-    // the first bash printf is still going and get dropped, leaving a
-    // half-updated file). Values are already typed here (QML numbers and
-    // bools), so unlike set() there is no string to parse.
+    // clock commits x/y/w/h together. Values are already typed here (QML
+    // numbers and bools), so unlike set() there is no string to parse.
+    // Now rides the same queueWrite() as set(), so it can't interleave
+    // with writes already in flight.
     function setAll(map) {
         const next = {}
         Object.assign(next, root.values, map)
         root.values = next
 
+        queueWrite(map)
+    }
+
+    // Oct 20 race: set() used to poke writeProc directly, and a second
+    // `running = true` landing while the first bash printf was still
+    // going is a NO-OP — the write is silently dropped. That day the
+    // animations pillTap fired two sets back to back and one could be
+    // lost (bindings showed it, disk didn't). Now every write goes
+    // through here: deltas queue up (merged by key, last-write-wins)
+    // while one is in flight and the queue flushes in writeProc's
+    // onExited — the in-memory `values` always holds the latest state,
+    // so each flush persists the full current snapshot and convergence
+    // (FileView reload) never sees a half-updated file.
+    property var writeDelta: ({})     // stashed key→value pairs, {} when idle
+    property bool writeInFlight: false
+
+    function queueWrite(delta) {
+        Object.assign(writeDelta, delta)   // merge by key, last-write-wins
+        if (writeInFlight) return          // onExited below flushes us
+        flushWrite()
+    }
+
+    function flushWrite() {
+        writeDelta = {}                    // consumed — new sets queue fresh
+        writeInFlight = true
         writeProc.command = ["bash", "-c",
             'printf %s "$1" > "$2"', "qs",
-            JSON.stringify(next), root.path]
+            JSON.stringify(root.values), root.path]
         writeProc.running = true
     }
 
-    Process { id: writeProc }
+    Process {
+        id: writeProc
+        onExited: exitCode => {
+            writeInFlight = false
+            if (exitCode !== 0)
+                console.log("Settings: write failed, code", exitCode)
+            if (Object.keys(writeDelta).length > 0) flushWrite()
+        }
+    }
 
     // Convergence path, same pattern as Colors/Wallpapers/Themes: IPC
     // writes hit the file, the inotify watch re-loads it inside the

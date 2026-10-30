@@ -20,6 +20,10 @@ Item {
     width: 76
     height: 24
 
+    Accessible.role: Accessible.Button
+    Accessible.name: (root.e && root.e.label ? root.e.label : "Toggle")
+        + " — " + (root.on ? "on" : "off")
+
     Component.onCompleted: readProc.running = true
 
     // Revert evaled baselines back inside hyprland — re-read so the pill
@@ -29,8 +33,10 @@ Item {
         function onRevertDone() { if (!readProc.running) readProc.running = true }
     }
 
-    function flip() {
-        const next = !root.on
+    function flip() { root.setTo(!root.on) }
+    function setTo(target) {
+        const next = !!target
+        if (root.on === next) return
         // Apply/Revert baseline must capture the OLD state first
         Services.SettingsApp.hyprChanged(e.hyprKey, root.on, next)
         root.on = next
@@ -40,6 +46,11 @@ Item {
         writeProc.running = true
         if (e && e.persistKey)
             Services.Settings.set(e.persistKey, next)
+    }
+    // per-row reset affordance in the window's row delegate
+    function resetToDefault() {
+        if (!root.e || root.e.default === undefined) return
+        root.setTo(root.e.default === true || root.e.default === "true")
     }
 
     Process {
@@ -52,7 +63,17 @@ Item {
             }
         }
     }
-    Process { id: writeProc }
+    Process {
+        id: writeProc
+        // hyprctl eval exits nonzero (7 on this build) for a bad chunk —
+        // tell the user instead of silently keeping the old state
+        onExited: (exitCode) => {
+            if (exitCode !== 0)
+                SettingsToast.push("«" + (root.e && root.e.label ? root.e.label
+                                           : "Setting")
+                                   + "» — hyprctl eval failed", true)
+        }
+    }
 
     Row {
         anchors.fill: parent

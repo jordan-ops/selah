@@ -28,11 +28,72 @@ Singleton {
         }
     }
 
-    property string page: "bar"
+    property string page: "display"
     property string focusId: ""   // launcher deep-link: row to highlight
 
+    // ——— window geometry ——— macOS-style resizable settings window.
+    // The popup surface (Bar.qml's settingsPopup) follows these live;
+    // the sizer inside springs to them; the corner grip writes them.
+    // Persisted so the user's size survives closing the window.
+    readonly property real winMinW: 740
+    readonly property real winMinH: 540
+    readonly property real winMaxW: 1280
+    readonly property real winMaxH: 900
+    property real winW: {
+        const v = parseFloat(Settings.values["window.width"])
+        return isNaN(v) ? 860
+            : Math.max(root.winMinW, Math.min(root.winMaxW, v))
+    }
+    property real winH: {
+        const v = parseFloat(Settings.values["window.height"])
+        return isNaN(v) ? 660
+            : Math.max(root.winMinH, Math.min(root.winMaxH, v))
+    }
+    function setWinSize(w, h) {
+        root.winW = Math.max(root.winMinW, Math.min(root.winMaxW, Math.round(w)))
+        root.winH = Math.max(root.winMinH, Math.min(root.winMaxH, Math.round(h)))
+        winPersist.restart()
+    }
+    // drag releases come in bursts of position events — write once the
+    // grip has been quiet for a beat, like every other debounced write
+    Timer {
+        id: winPersist
+        interval: 400
+        onTriggered: Settings.setAll({
+            "window.width":  String(root.winW),
+            "window.height": String(root.winH)
+        })
+    }
+
+    // ——— page history ——— the content header's ‹ › pair walks it.
+    // Sidebar clicks / search jumps / deep-links all funnel through the
+    // `page` property and push here (forward stack truncated); histGo
+    // walks without pushing via the guard.
+    property var pageHist: ["display"]
+    property int histPos: 0
+    property bool histGuard: false
+    onPageChanged: {
+        if (root.histGuard) return
+        if (root.pageHist[root.histPos] === root.page) return
+        const h = root.pageHist.slice(0, root.histPos + 1)
+        h.push(root.page)
+        if (h.length > 30) h.shift()
+        root.pageHist = h
+        root.histPos = h.length - 1
+    }
+    function histGo(delta) {
+        const t = root.histPos + delta
+        if (t < 0 || t >= root.pageHist.length) return
+        root.histGuard = true
+        root.histPos = t
+        root.page = root.pageHist[t]
+        root.histGuard = false
+    }
+    readonly property bool histBackAvail: root.histPos > 0
+    readonly property bool histFwdAvail: root.histPos < root.pageHist.length - 1
+
     function show(page, focusId) {
-        root.page = page && page !== "" ? page : "bar"
+        root.page = page && page !== "" ? page : "display"
         root.focusId = focusId || ""
         open = true
     }

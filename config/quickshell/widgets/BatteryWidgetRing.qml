@@ -100,7 +100,7 @@ WidgetHost {
             iconSize: 14
             customColor: root.levelColor
 
-            // Nebula's charging breath, stepped to ~12 fps. The original
+            // Upstream's charging breath, stepped to ~12 fps. The original
             // smooth 60 fps SequentialAnimation on opacity re-rendered this
             // widget layer every frame for ~9% of a core — permanently, the
             // whole time the laptop is plugged in. A sine stepped at 80 ms

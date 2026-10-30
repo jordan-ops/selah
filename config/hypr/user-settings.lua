@@ -3,6 +3,9 @@
 -- require()s this file last, so these override the defaults above.
 hl.config({
     decoration = {
-        active_opacity = 1,
+        blur = {
+            vibrancy = 0.5,
+            enabled = true,
+        },
     },
 })

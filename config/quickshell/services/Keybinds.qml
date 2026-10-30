@@ -6,7 +6,7 @@ import Quickshell.Io
 import QtQuick
 
 // Keybind cheat sheet service — parses ~/.config/hypr/binds.lua (the file
-// hyprland actually loads; same reasoning Nebula documents for parsing lua
+// hyprland actually loads; same reasoning upstream documents for parsing lua
 // instead of the .conf chain) into [{ name, binds: [{ chord, desc }] }]
 // grouped by binds.lua's `---- NAME ----` section headers, and owns the
 // overlay's `open` flag. CheatSheet.qml draws it.
@@ -90,7 +90,7 @@ Singleton {
     // Split `s` on `delim` only where it sits outside quotes and outside
     // (){} nesting. Lua's concat ".." and its comment "--" both occur inside
     // string literals in this config, so naive splitting mangles them.
-    // (Nebula's _splitTop + SettingsKeybindsEditor's splitConcat, merged:
+    // (the upstream _splitTop + SettingsKeybindsEditor's splitConcat, merged:
     // index-accurate output, both quote styles.)
     function splitTop(s, delim) {
         const out = []
@@ -143,7 +143,7 @@ Singleton {
 
     // Same resolution, lenient: used for descriptions, where an unresolved
     // identifier is printed verbatim rather than failing the row
-    // (Nebula's _resolveExpr).
+    // (the upstream _resolveExpr).
     function resolveExpr(expr, locals) {
         const parts = splitTop(String(expr), "..")
         let out = ""
@@ -177,7 +177,7 @@ Singleton {
         return -1
     }
 
-    // "window-fullscreen" style names → "Window fullscreen" (Nebula)
+    // "window-fullscreen" style names → "Window fullscreen" (upstream)
     function humanize(s) {
         if (!s) return ""
         let out = String(s).replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -187,7 +187,7 @@ Singleton {
     }
 
     // No comment on the statement → read the dispatcher call itself, the
-    // way Nebula's _describe does: exec_cmd shows the command, hl.dsp.foo()
+    // way the upstream _describe does: exec_cmd shows the command, hl.dsp.foo()
     // shows "Foo — key value".
     function describe(action, locals) {
         const d = String(action).trim()
@@ -271,7 +271,7 @@ Singleton {
         if (close < 0) return null
 
         // args[0] = chord, args[1] = dispatcher; a third options table
-        // ({ mouse = true }) rides along in Nebula's split and is ignored
+        // ({ mouse = true }) rides along in the upstream split and is ignored
         const args = splitTop(code.slice(bindIdx + 8, close), ",")
         if (args.length < 2) return null
 
@@ -282,7 +282,7 @@ Singleton {
     }
 
     // `key` / `i` → the loop's range ("1–10"), in the chord AND the
-    // description (Nebula's loopRange behavior, plus `key`, which is this
+    // description (the upstream loopRange behavior, plus `key`, which is this
     // file's alias for `i` inside `for i = 1, 10 do`). Takes the loop state
     // as arguments instead of closing over parse()'s locals — deliberately
     // not a helper declared INSIDE parse(): qmllint's analyzer silently
@@ -324,7 +324,7 @@ Singleton {
 
             // ---- KEYBINDINGS ---- → a section. The pure-dash separator
             // lines around it match too, so a header must carry a name that
-            // isn't just dashes (Nebula matched `-- ── Name ──` comments
+            // isn't just dashes (upstream matched `-- ── Name ──` comments
             // instead; this file uses bare-dash banners).
             const sec = line.match(/^-{2,}\s*(.+?)\s*-{2,}$/)
             if (sec) {
@@ -373,13 +373,13 @@ Singleton {
             if (!b) continue
 
             // binds that arrive before any `---- NAME ----` banner group
-            // under "General" (Nebula's fallback)
+            // under "General" (upstream's fallback)
             if (!current) {
                 current = { name: "General", binds: [] }
                 groups.push(current)
             }
             current.binds.push({
-                // Nebula tidies spacing around the separator so caps split
+                // Upstream tidies spacing around the separator so caps split
                 // cleanly on " + "
                 chord: loopSub(b.chord, loopVar, loopRange, loopAliases)
                     .replace(/\s*\+\s*/g, " + ").trim(),

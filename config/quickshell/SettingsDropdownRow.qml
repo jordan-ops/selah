@@ -22,6 +22,10 @@ import "./services" as Services
 //                      set-default so @DEFAULT_SINK@/@DEFAULT_SOURCE@
 //                      (every volume/mute row) follows it. Lists stay
 //                      short, so no filter box.
+//   source "sinkinput" — per-app routing (the appmixer card): the SAME
+//                      sink list, but a pick runs move-sink-input on
+//                      `streamIdx` and never touches the default;
+//                      the parent feeds `current` from its own poll.
 Item {
     id: root
 
@@ -32,7 +36,13 @@ Item {
     readonly property bool isApps: e && e.source === "apps"
     readonly property bool isSinks: e && e.source === "sinks"
     readonly property bool isSources: e && e.source === "sources"
-    readonly property bool isAudio: isSinks || isSources
+    // per-app routing (appmixer card): same sink LIST as "sinks", but a
+    // pick MOVES the parent's stream (pactl move-sink-input) instead of
+    // touching the default — the parent feeds `current` + `streamIdx`
+    readonly property bool isSinkInput: e && e.source === "sinkinput"
+    readonly property bool isAudio: isSinks || isSources || isSinkInput
+    // the sink-input index this dropdown routes (sinkinput mode only)
+    property int streamIdx: -1
 
     property var families: []
     property string current: ""
@@ -113,8 +123,16 @@ Item {
             appsSet.running = true
         } else if (isAudio) {
             root.current = String(value)
-            audioSet.command = ["pactl", isSinks ? "set-default-sink" : "set-default-source",
-                                String(value)]
+            if (isSinkInput) {
+                // per-app routing: move THIS stream to the picked sink —
+                // live like cmdswitch/cmdslider rows (the mixer card
+                // re-syncs `current` from pactl on its next tick)
+                audioSet.command = ["pactl", "move-sink-input",
+                                    String(root.streamIdx), String(value)]
+            } else {
+                audioSet.command = ["pactl", isSinks ? "set-default-sink" : "set-default-source",
+                                    String(value)]
+            }
             audioSet.running = false
             audioSet.running = true
         } else {
@@ -248,7 +266,8 @@ Item {
     // list rather than a broken row.
     Process {
         id: audioList
-        command: ["pactl", "-f", "json", "list", root.isSinks ? "sinks" : "sources"]
+        // sinkinput mode routes TO sinks, so it reads the sink list
+        command: ["pactl", "-f", "json", "list", root.isSources ? "sources" : "sinks"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const out = []
@@ -267,9 +286,11 @@ Item {
 
     Process {
         id: audioCurrent
-        command: ["pactl", root.isSinks ? "get-default-sink" : "get-default-source"]
+        command: ["pactl", root.isSources ? "get-default-source" : "get-default-sink"]
         stdout: StdioCollector {
-            onStreamFinished: root.current = text.trim()
+            // sinkinput mode: the mixer card owns `current` (the stream's
+            // own sink, not the default) and re-syncs it on every poll
+            onStreamFinished: if (!root.isSinkInput) root.current = text.trim()
         }
     }
 

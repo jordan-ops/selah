@@ -1,6 +1,6 @@
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names the widget files bind on, backed by this shell's own
-// battery service — no Nebula backend travels with us.
+// battery service — no upstream backend travels with us.
 pragma Singleton
 
 import Quickshell
@@ -14,7 +14,7 @@ Singleton {
     readonly property bool hasBattery: Services.Battery.hasBattery
     readonly property bool isCharging: Services.Battery.charging
 
-    // Nebula hands its widgets a 0..1 fraction; our Battery keeps percent
+    // Upstream hands its widgets a 0..1 fraction; our Battery keeps percent
     readonly property real powerLevel: Services.Battery.percent / 100
 
     // Newest row carrying a real watt reading (sysfs power_now is a

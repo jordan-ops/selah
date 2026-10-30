@@ -5,9 +5,9 @@
 // Ported from Nebula's services/ServiceMusicWave.qml (GPL-3.0) — qs.modules
 // imports dropped (sibling resolution in widgets/).
 //
-// Nebula filled `captured` from ServiceCava, a live audio spectrum we don't
+// Upstream filled `captured` from ServiceCava, a live audio spectrum we don't
 // ship (nothing in this shell exposes one). With no spectrum the adapter
-// serves Nebula's own no-data path unchanged: `captured` stays at -1 so
+// serves upstream's own no-data path unchanged: `captured` stays at -1 so
 // cell() falls back to the deterministic per-track `seed`, giving a
 // track-shaped wave rather than an empty row — the widget's own progress
 // highlight then does the rest. retain()/release() keep the refcount the

@@ -1,3 +1,4 @@
+pragma Singleton
 // Single source of truth for the settings app: SettingsWindow renders
 // these entries AND the launcher indexes this very list (omasettings'
 // lesson — the search index is built from the section sources, so the
@@ -30,6 +31,8 @@
 //                        hyprKey/settingsKey + option.value. The current
 //                        value live-reads from hyprKey / settingsKey /
 //                        entry.readCommand so the matching chip starts lit.
+//                        optional persistKey names the settings.json slot
+//                        the start-of-session reapply restores into
 //          cmdswitch -> bool pill + On/Off text backed by shell state:
 //                        readCommand stdout scanned for readTrue, flip
 //                        runs command[] then re-reads
@@ -49,10 +52,10 @@
 //                        band and DNS chip groups (re-join to apply)
 //          timecard  -> material clock card; ticking time, NTP status,
 //                        searchable timezone picker (pkexec)
-//          knobcard  -> material card of rotary knobs; knobs: [{label,
-//                        hyprKey, min/max/step/scale/suffix}] — each
-//                        cell reads hyprctl getoption and commits with
-//                        the slider's hyprChanged + hyprEval rule
+//          cmdslider-> command-backed frost slider (audio volumes):
+//                        readCommand stdout scanned for the first
+//                        /(\d+)%/, writeCommand gets the value appended;
+//                        live + throttled like cmdswitch, no Apply/Revert
 //          textsize  -> slider UI over scripts/set-text-size.sh: live
 //                        px from gsettings font-name, one write patches
 //                        gsettings/GTK/kitty/foot together (9–20)
@@ -69,21 +72,34 @@
 //                        chips; carries hyprKey + persistKey so the
 //                        compositor toggle re-applies like a hyprswitch
 //   value: static text for info rows ("Super + Space")
-//   source for info: theme | wallpaper | battery | net (live reads)
+//   source for info: theme | wallpaper | battery | net | pkgupdates |
+//                    repoupdate (live reads — anything else shows the
+//                    static `value`; info rows have NO readCommand and
+//                    NO hyprKey, so anything not in this list must say
+//                    so in its description)
+//   default: the value the row SHIPS with (compositor/config fallback,
+//            never a guess) — the per-row reset target, read
+//            defensively: switch/choice fall back to their key
+//            fallback (false / options[0]), hypr rows fall back to the
+//            Lua config's own number (appearance.lua / input.lua), and
+//            live-state rows (knobs, radio switches) carry none when
+//            no default exists
+//   persistKey: settings.json slot the start-of-session reapply
+//            restores (needs a value stored under it — slider /
+//            hyprswitch rows record it on change)
 // Grouping: type "section" is a heading, not a setting — it splits a
 // merged page (Lock screen holds the session lock AND the SDDM greeter)
 // and is filtered out of `searchable`, the list both search indexes read.
 
 import QtQuick
 import Quickshell
-pragma Singleton
 
 // Ported omasettings entries stay inside these types:
 //   - Hyprland value that applies now  -> hyprEval
 //     'hl.config({...})' (Lua key shape mirrors the keyword, e.g.
 //     decoration:blur:enabled -> { decoration = { blur = { enabled }}}),
 //     or hyprswitch / buttons reading hyprctl getoption
-//   - documented omarchy/omasettings command                 -> action argv
+//   - documented external command                          -> action argv
 //     kept as-is; missing binaries fail silently (see
 //     omasettings-needs-user.md "Ported with missing backend")
 //   - setting whose row needs a slider, text field, or live
@@ -106,8 +122,9 @@ Singleton {
     // gets, so "30" would land as the number 30 and the chips'
     // strict === against a string model value never matched
     // ————————————————— Blur (shell + window frosting) —————————————————
-    // appearance.lua ships the glass recipe — size 8, passes 3,
-    // popups on, vibrancy 0.1696, tuned to the lockscreen's frost —
+    // appearance.lua ships the glass recipe — size 4, passes 1,
+    // vibrancy 0.1696, popups off, master switch OFF (the 2026-10 heat
+    // retune; the old 8/3/popups-on recipe is kept in its git history) —
     // so these rows OPEN on those numbers until one is moved. Each is
     // a live Hyprland option: read with hyprctl getoption, committed
     // with hyprctl eval, recorded under persistKey so the start-of-
@@ -161,7 +178,7 @@ Singleton {
     // ipc path every other command here uses.
     // ————————————————— Neovim (omasettings §23) —————————————————
     // ————————————————— Widgets —————————————————
-    // The Nebula widget port: every switch writes a flat widgets.*
+    // The widget layer port: every switch writes a flat widgets.*
     // key that widgets/SettingsConfig.qml folds into its blob, so the
     // studio, quick-add and this page can never disagree — one store,
     // three views. Choices list options DEFAULT FIRST (choiceValue()
@@ -173,81 +190,57 @@ Singleton {
     id: root
 
     readonly property var pages: [{
-        "id": "bar",
-        "name": "Bar",
-        "icon": "preferences-system"
-    }, {
-        "id": "toggles",
-        "name": "Quick toggles",
-        "icon": "preferences-other"
+        // merged page: the bar's own rows, the panel's display settings
+        // and the clock card share one "Display" pane (was three thin
+        // pages: Bar, Displays, Date & Time). Quick toggles is gone —
+        // every row it had is a control-center / power-menu action.
+        "id": "display",
+        "name": "Display"
     }, {
         "id": "appearance",
-        "name": "Appearance",
-        "icon": "preferences-desktop-color"
+        "name": "Appearance"
     }, {
         "id": "widgets",
-        "name": "Widgets",
-        "icon": "view-grid"
+        "name": "Widgets"
     }, {
         "id": "animations",
-        "name": "Animations",
-        "icon": "media-playlist-repeat"
+        "name": "Animations"
     }, {
         "id": "bindings",
-        "name": "Keybinding editor",
-        "icon": "preferences-desktop-keyboard-shortcuts"
+        "name": "Keybinding editor"
     }, {
         "id": "compose",
-        "name": "Compose keys",
-        "icon": "insert-text"
+        "name": "Compose keys"
     }, {
         "id": "pointer",
-        "name": "Mouse & Touchpad",
-        "icon": "input-mouse"
-    }, {
-        "id": "displays",
-        "name": "Displays",
-        "icon": "video-display"
+        "name": "Mouse & Touchpad"
     }, {
         "id": "audio",
-        "name": "Audio",
-        "icon": "audio-volume-high"
+        "name": "Audio"
     }, {
         "id": "network",
-        "name": "Network",
-        "icon": "network-wireless"
+        "name": "Network"
     }, {
         "id": "bluetooth",
-        "name": "Bluetooth",
-        "icon": "bluetooth-active"
+        "name": "Bluetooth"
     }, {
         "id": "power",
-        "name": "Power",
-        "icon": "battery-good"
+        "name": "Power"
     }, {
         "id": "lock",
-        "name": "Lock screen",
-        "icon": "system-lock-screen"
-    }, {
-        "id": "datetime",
-        "name": "Date & Time",
-        "icon": "preferences-system-time"
+        "name": "Lock screen"
     }, {
         "id": "defaults",
-        "name": "Default apps",
-        "icon": "web-browser"
+        "name": "Default apps"
     }, {
         "id": "nvim",
-        "name": "Neovim",
-        "icon": "text-x-generic"
+        "name": "Neovim"
     }, {
         "id": "updates",
-        "name": "Updates",
-        "icon": "software-update-available"
+        "name": "Updates"
     }, {
         "id": "about",
-        "name": "About",
-        "icon": "help-about"
+        "name": "About"
     }]
     // What a search index offers: `entries` minus the section headings,
     // which are page chrome rather than settings. The settings window's
@@ -257,9 +250,15 @@ Singleton {
         return e.type !== "section";
     })
     readonly property var entries: [{
+        "id": "secDisplayBar",
+        "page": "display",
+        "type": "section",
+        "label": "Bar"
+    }, {
         "id": "restStyle",
-        "page": "bar",
+        "page": "display",
         "type": "choice",
+        "default": "compact",
         "source": "settings",
         "key": "bar.restStyle",
         "label": "Rest style",
@@ -274,78 +273,29 @@ Singleton {
         "keywords": "bar pill rest compact wide capsule idle hover expand"
     }, {
         "id": "batteryText",
-        "page": "bar",
+        "page": "display",
         "type": "switch",
+        "default": false,
         "key": "bar.batteryText",
         "label": "Battery percentage",
         "description": "Show the % number in the battery ring's top gap",
         "keywords": "battery percent ring number text status wifi charge"
     }, {
         "id": "barFloating",
-        "page": "bar",
+        "page": "display",
         "type": "switch",
+        "default": false,
         "key": "bar.floating",
         "label": "Floating pill",
         "description": "Suspend the pill below the top edge instead of flush on it",
         "keywords": "bar pill float floating suspended gap island top margin edge"
-    }, {
-        "id": "barTransparent",
-        "page": "bar",
-        "type": "action",
-        "command": ["omarchy", "bar", "transparent", "toggle"],
-        "verb": "Toggle",
-        "label": "Transparent bar",
-        "description": "Drops the bar's own background so the wallpaper shows through · needs omarchy bar",
-        "keywords": "bar transparent background wallpaper omarchy"
-    }, {
-        "id": "nightlight",
-        "page": "toggles",
-        "type": "action",
-        "command": ["qs", "ipc", "call", "nightlight", "toggle"],
-        "verb": "Toggle",
-        "label": "Night light",
-        "description": "Warm screen tint for evening use",
-        "keywords": "night light warm tint blue gamma evening filter"
-    }, {
-        "id": "updates",
-        "page": "toggles",
-        "type": "action",
-        "command": ["qs", "ipc", "call", "updates", "toggle"],
-        "label": "Updates",
-        "description": "Check pending system updates",
-        "keywords": "update upgrade pacman packages system refresh"
-    }, {
-        "id": "controlcenter",
-        "page": "toggles",
-        "type": "action",
-        "command": ["qs", "ipc", "call", "controlcenter", "toggle"],
-        "label": "Control center",
-        "description": "Audio, network, bluetooth and quick switches",
-        "keywords": "control center wifi bluetooth volume audio network quick"
-    }, {
-        "id": "powermenu",
-        "page": "toggles",
-        "type": "action",
-        "command": ["qs", "ipc", "call", "powermenu", "toggle"],
-        "label": "Power menu",
-        "description": "Shutdown, reboot and log out",
-        "keywords": "power shutdown reboot logout sleep restart off"
-    }, {
-        "id": "lock",
-        "page": "toggles",
-        "type": "action",
-        "command": ["qs", "ipc", "call", "lock", "lock"],
-        "verb": "Lock now",
-        "label": "Lock screen",
-        "description": "Lock this session immediately",
-        "keywords": "lock screen secure password session away"
     }, {
         "id": "apTheme",
         "page": "appearance",
         "type": "carousel",
         "source": "themes",
         "label": "Theme",
-        "description": "‹ previous · hero · next › — click the hero to apply",
+        "description": "Big preview with a thumbnail strip — click the preview to apply, a thumb jumps",
         "keywords": "theme color dark light appearance carousel preview set"
     }, {
         "id": "apWall",
@@ -353,7 +303,7 @@ Singleton {
         "type": "carousel",
         "source": "wallpapers",
         "label": "Wallpaper",
-        "description": "‹ previous · hero · next › — click the hero to apply",
+        "description": "Big preview with a thumbnail strip — click the preview to apply, a thumb jumps",
         "keywords": "wallpaper background image carousel preview"
     }, {
         "id": "apFont",
@@ -367,7 +317,9 @@ Singleton {
         "id": "apLayout",
         "page": "appearance",
         "type": "buttons",
+        "default": "scrolling",
         "hyprKey": "general:layout",
+        "persistKey": "hypr.layout",
         "options": [{
             "label": "Dwindle",
             "value": "dwindle"
@@ -389,19 +341,12 @@ Singleton {
         "description": "GTK apps and terminals · 9–20 px · one write hits gsettings, GTK, kitty and foot",
         "keywords": "text size scale dpi gtk shell terminal appearance"
     }, {
-        "id": "apNightlight",
-        "page": "appearance",
-        "type": "action",
-        "command": ["omarchy-toggle-nightlight"],
-        "verb": "Toggle",
-        "label": "Night light",
-        "description": "Warms the screen to 4000K · needs omarchy-toggle-nightlight",
-        "keywords": "night light warm tint blue gamma evening filter"
-    }, {
         "id": "apGapIn",
         "page": "appearance",
         "type": "slider",
+        "default": 5,
         "hyprKey": "general:gaps_in",
+        "persistKey": "hypr.gapsIn",
         "min": 0,
         "max": 40,
         "step": 1,
@@ -413,7 +358,9 @@ Singleton {
         "id": "apGapOut",
         "page": "appearance",
         "type": "slider",
+        "default": 20,
         "hyprKey": "general:gaps_out",
+        "persistKey": "hypr.gapsOut",
         "min": 0,
         "max": 60,
         "step": 1,
@@ -425,7 +372,9 @@ Singleton {
         "id": "apGapFloat",
         "page": "appearance",
         "type": "slider",
+        "default": 0,
         "hyprKey": "general:float_gaps",
+        "persistKey": "hypr.floatGaps",
         "min": 0,
         "max": 40,
         "step": 1,
@@ -437,7 +386,9 @@ Singleton {
         "id": "apRounding",
         "page": "appearance",
         "type": "slider",
+        "default": 10,
         "hyprKey": "decoration:rounding",
+        "persistKey": "hypr.rounding",
         "min": 0,
         "max": 30,
         "step": 1,
@@ -446,41 +397,55 @@ Singleton {
         "description": "Corner radius of every window (decoration:rounding)",
         "keywords": "border corner rounding radius window decoration"
     }, {
-        "id": "apOpacity",
+        "id": "apOpacityActive",
         "page": "appearance",
-        "type": "knobcard",
-        "label": "Window opacity",
-        "description": "Turn each dial — focused, background and fullscreen (decoration:*_opacity)",
-        "knobs": [{
-            "label": "Active",
-            "hyprKey": "decoration:active_opacity",
-            "min": 50,
-            "max": 100,
-            "step": 1,
-            "scale": 0.01,
-            "suffix": "%"
-        }, {
-            "label": "Inactive",
-            "hyprKey": "decoration:inactive_opacity",
-            "min": 50,
-            "max": 100,
-            "step": 1,
-            "scale": 0.01,
-            "suffix": "%"
-        }, {
-            "label": "Fullscreen",
-            "hyprKey": "decoration:fullscreen_opacity",
-            "min": 50,
-            "max": 100,
-            "step": 1,
-            "scale": 0.01,
-            "suffix": "%"
-        }],
-        "keywords": "opacity transparency active inactive focused unfocused fullscreen window"
+        "type": "slider",
+        "default": 100,
+        "hyprKey": "decoration:active_opacity",
+        "persistKey": "hypr.activeOpacity",
+        "min": 50,
+        "max": 100,
+        "step": 1,
+        "scale": 0.01,
+        "suffix": "%",
+        "label": "Active window opacity",
+        "description": "Focused windows (decoration:active_opacity)",
+        "keywords": "opacity transparency active focused window see through"
+    }, {
+        "id": "apOpacityInactive",
+        "page": "appearance",
+        "type": "slider",
+        "default": 100,
+        "hyprKey": "decoration:inactive_opacity",
+        "persistKey": "hypr.inactiveOpacity",
+        "min": 50,
+        "max": 100,
+        "step": 1,
+        "scale": 0.01,
+        "suffix": "%",
+        "label": "Inactive window opacity",
+        "description": "Background windows (decoration:inactive_opacity)",
+        "keywords": "opacity transparency inactive unfocused background window"
+    }, {
+        "id": "apOpacityFullscreen",
+        "page": "appearance",
+        "type": "slider",
+        "default": 100,
+        "hyprKey": "decoration:fullscreen_opacity",
+        "persistKey": "hypr.fullscreenOpacity",
+        "min": 50,
+        "max": 100,
+        "step": 1,
+        "scale": 0.01,
+        "suffix": "%",
+        "label": "Fullscreen opacity",
+        "description": "Fullscreen windows (decoration:fullscreen_opacity)",
+        "keywords": "opacity transparency fullscreen window games video"
     }, {
         "id": "apPanelAlpha",
         "page": "appearance",
         "type": "choice",
+        "default": 0,
         "source": "settings",
         "key": "appearance.transparency",
         "label": "Panel transparency",
@@ -508,6 +473,7 @@ Singleton {
         "id": "apBlurOn",
         "page": "appearance",
         "type": "hyprswitch",
+        "default": false,
         "hyprKey": "decoration:blur:enabled",
         "persistKey": "hypr.blurEnabled",
         "label": "Blur effects",
@@ -517,6 +483,7 @@ Singleton {
         "id": "apBlurSize",
         "page": "appearance",
         "type": "slider",
+        "default": 4,
         "hyprKey": "decoration:blur:size",
         "persistKey": "hypr.blurSize",
         "min": 1,
@@ -524,24 +491,26 @@ Singleton {
         "step": 1,
         "suffix": "px",
         "label": "Blur size",
-        "description": "Radius of the frost — 8 is the lockscreen's strength (decoration:blur:size)",
+        "description": "Radius of the frost — ships 4 since the heat retune; 8 is the heavy frosted recipe (decoration:blur:size)",
         "keywords": "blur size radius strength soft hard heavy frosted lockscreen glass"
     }, {
         "id": "apBlurPasses",
         "page": "appearance",
         "type": "slider",
+        "default": 1,
         "hyprKey": "decoration:blur:passes",
         "persistKey": "hypr.blurPasses",
         "min": 1,
         "max": 5,
         "step": 1,
         "label": "Blur passes",
-        "description": "Blurs the blur again — 3 smears far past 1, costs a little GPU (decoration:blur:passes)",
+        "description": "Blurs the blur again — ships 1; raise it with the size, 3 smears far past 1 and costs GPU (decoration:blur:passes)",
         "keywords": "blur passes pass smear smear quality gpu performance heavy soft"
     }, {
         "id": "apBlurPopups",
         "page": "appearance",
         "type": "hyprswitch",
+        "default": false,
         "hyprKey": "decoration:blur:popups",
         "persistKey": "hypr.blurPopups",
         "label": "Blur popups",
@@ -551,6 +520,7 @@ Singleton {
         "id": "apBlurVibrancy",
         "page": "appearance",
         "type": "slider",
+        "default": 0.1696,
         "hyprKey": "decoration:blur:vibrancy",
         "persistKey": "hypr.blurVibrancy",
         "min": 0,
@@ -568,49 +538,6 @@ Singleton {
         "label": "Reload Hyprland",
         "description": "After Apply — re-reads the config so the shell's glass frosts at the new values (windows already changed live)",
         "keywords": "reload refresh restart config shell glass apply blur catch up"
-    }, {
-        "id": "apSectionClock",
-        "page": "appearance",
-        "type": "section",
-        "label": "Desktop clock"
-    }, {
-        "id": "apClock",
-        "page": "appearance",
-        "type": "switch",
-        "key": "clock.enabled",
-        "label": "Show on desktop",
-        "description": "Giant time over the wallpaper · double-click it to move or resize",
-        "keywords": "desktop clock widget giant big time date wallpaper draggable move resize place"
-    }, {
-        "id": "apClockFormat",
-        "page": "appearance",
-        "type": "choice",
-        "source": "settings",
-        "key": "clock.format",
-        "label": "Time format",
-        "options": [{
-            "value": "hh:mm AP - MM/dd",
-            "label": "12:30 AM - 06/26"
-        }, {
-            "value": "hh:mm AP",
-            "label": "12:30 AM"
-        }, {
-            "value": "hh:mm:ss",
-            "label": "12:30:45"
-        }, {
-            "value": "HH:mm - ddd d MMM",
-            "label": "12:30 - Mon 5 Oct"
-        }],
-        "description": "Qt date tokens · applies to the widget and the Clock lock style",
-        "keywords": "clock format time date seconds 12 24 hour am pm seconds style"
-    }, {
-        "id": "apClockGlow",
-        "page": "appearance",
-        "type": "switch",
-        "key": "clock.glow",
-        "label": "Clock glow",
-        "description": "Soft halo of the same glyphs behind the time · desktop and lock",
-        "keywords": "clock glow halo blur neon light backlight"
     }, {
         "id": "bndEditor",
         "page": "bindings",
@@ -638,6 +565,7 @@ Singleton {
         "id": "fxRipple",
         "page": "animations",
         "type": "switch",
+        "default": false,
         "key": "effects.ripple",
         "label": "Desktop ripples",
         "description": "Ripple rings where the desktop is clicked · motion + game mode gates still apply",
@@ -646,6 +574,7 @@ Singleton {
         "id": "fxEdgeLight",
         "page": "animations",
         "type": "switch",
+        "default": false,
         "key": "effects.edgelight",
         "label": "Notification edge glow",
         "description": "Accent light sweeping around the bar pill when a notification lands",
@@ -654,6 +583,7 @@ Singleton {
         "id": "fxTone",
         "page": "animations",
         "type": "switch",
+        "default": false,
         "key": "effects.tone",
         "label": "Alert tone",
         "description": "Short sound when the capsule flashes a high-priority event (plugging in the charger)",
@@ -662,6 +592,7 @@ Singleton {
         "id": "ptrNumlock",
         "page": "pointer",
         "type": "hyprswitch",
+        "default": false,
         "hyprKey": "input:numlock_by_default",
         "persistKey": "hypr.numlock",
         "label": "Num lock on at login",
@@ -670,16 +601,23 @@ Singleton {
     }, {
         "id": "ptrSensitivity",
         "page": "pointer",
-        "type": "info",
-        "value": "0.0",
+        "type": "slider",
+        "hyprKey": "input:sensitivity",
+        "persistKey": "hypr.sensitivity",
+        "default": 0,
+        "min": -1,
+        "max": 1,
+        "step": 0.05,
         "label": "Sensitivity",
-        "description": "How far the pointer travels · −1..1 shown 0–100% · needs percent row",
+        "description": "How far the pointer travels · −1…1, 0 = no change · live via hyprctl getoption (input:sensitivity)",
         "keywords": "pointer sensitivity mouse speed acceleration number"
     }, {
         "id": "ptrAccel",
         "page": "pointer",
         "type": "buttons",
+        "default": "",
         "hyprKey": "input:accel_profile",
+        "persistKey": "hypr.accelProfile",
         "options": [{
             "label": "Default",
             "value": ""
@@ -697,7 +635,9 @@ Singleton {
         "id": "ptrFollow",
         "page": "pointer",
         "type": "buttons",
+        "default": 1,
         "hyprKey": "input:follow_mouse",
+        "persistKey": "hypr.followMouse",
         "options": [{
             "label": "Off",
             "value": 0
@@ -718,6 +658,7 @@ Singleton {
         "id": "ptrNaturalScroll",
         "page": "pointer",
         "type": "hyprswitch",
+        "default": false,
         "hyprKey": "input:touchpad:natural_scroll",
         "persistKey": "hypr.naturalScroll",
         "label": "Natural scrolling",
@@ -727,6 +668,7 @@ Singleton {
         "id": "ptrTapToClick",
         "page": "pointer",
         "type": "hyprswitch",
+        "default": true,
         "hyprKey": "input:touchpad:tap_to_click",
         "persistKey": "hypr.tapToClick",
         "label": "Tap to click",
@@ -736,6 +678,7 @@ Singleton {
         "id": "ptrClickfinger",
         "page": "pointer",
         "type": "hyprswitch",
+        "default": false,
         "hyprKey": "input:touchpad:clickfinger_behavior",
         "persistKey": "hypr.clickfinger",
         "label": "Two-finger right click",
@@ -745,6 +688,7 @@ Singleton {
         "id": "ptrDisableTyping",
         "page": "pointer",
         "type": "hyprswitch",
+        "default": true,
         "hyprKey": "input:touchpad:disable_while_typing",
         "persistKey": "hypr.disableWhileTyping",
         "label": "Disable while typing",
@@ -754,6 +698,7 @@ Singleton {
         "id": "ptrScrollFactor",
         "page": "pointer",
         "type": "slider",
+        "default": 1,
         "hyprKey": "input:scroll_factor",
         "hyprKeys": ["input:scroll_factor", "input:touchpad:scroll_factor"],
         "persistKey": "hypr.scrollFactor",
@@ -764,17 +709,23 @@ Singleton {
         "description": "Wheel and two-finger steps land faster or slower · survives restarts",
         "keywords": "scroll speed factor wheel touchpad mouse scrolling fast slow"
     }, {
+        "id": "secDisplays",
+        "page": "display",
+        "type": "section",
+        "label": "Displays"
+    }, {
         "id": "dspConnector",
-        "page": "displays",
+        "page": "display",
         "type": "info",
-        "value": "eDP-1",
+        "value": "eDP-1 (this panel)",
         "label": "Connector",
-        "description": "AU Optronics 0x34ED, read from hyprctl monitors (snapshot)",
+        "description": "The laptop's internal panel connector — as reported at boot (static snapshot, not live)",
         "keywords": "display connector edp monitor laptop output edid"
     }, {
         "id": "dspMode",
-        "page": "displays",
+        "page": "display",
         "type": "buttons",
+        "default": "preferred",
         "readCommand": ["bash", "-c", "grep -m1 -oE 'mode *= *\"[^\"]*\"' $HOME/.config/hypr/monitors.lua | cut -d'\"' -f2"],
         "options": [{
             "label": "Preferred",
@@ -785,13 +736,14 @@ Singleton {
             "value": "1920x1080@60.06Hz",
             "command": [Quickshell.shellDir + "/scripts/set-display.sh", "mode", "1920x1080@60.06Hz"]
         }],
-        "label": "Resolution (eDP-1)",
+        "label": "Resolution (built-in panel)",
         "description": "Writes monitors.lua (backup + luac check), then applies live",
         "keywords": "display resolution mode preferred refresh rate eDP persist"
     }, {
         "id": "dspScale",
-        "page": "displays",
+        "page": "display",
         "type": "buttons",
+        "default": "1",
         "readCommand": ["bash", "-c", "grep -m1 -oE 'scale *= *\"[^\"]*\"' $HOME/.config/hypr/monitors.lua | cut -d'\"' -f2"],
         "options": [{
             "label": "×1",
@@ -810,13 +762,13 @@ Singleton {
             "value": "1.5",
             "command": [Quickshell.shellDir + "/scripts/set-display.sh", "scale", "1.5"]
         }],
-        "label": "Scale (eDP-1)",
+        "label": "Scale (built-in panel)",
         "description": "Steps persist into monitors.lua and apply live",
         "keywords": "display scale eDP laptop hidpi factor"
     }, {
         "id": "audOutVolume",
         "page": "audio",
-        "type": "knob",
+        "type": "cmdslider",
         "readCommand": ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
         "writeCommand": ["pactl", "set-sink-volume", "@DEFAULT_SINK@"],
         "min": 0,
@@ -824,12 +776,13 @@ Singleton {
         "step": 1,
         "suffix": "%",
         "label": "Output volume",
-        "description": "Turn the dial — 0–150%, writes land live (pactl)",
+        "description": "0–150%, writes land live (pactl) — no Apply needed",
         "keywords": "audio volume output sound loud percent pactl"
     }, {
         "id": "audOutMute",
         "page": "audio",
         "type": "cmdswitch",
+        "default": false,
         "readCommand": ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
         "readTrue": "Mute: yes",
         "command": ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"],
@@ -845,9 +798,16 @@ Singleton {
         "description": "Every sink PipeWire exposes — a pick makes it the default (pactl)",
         "keywords": "audio output device sink default headphones hdmi speakers"
     }, {
+        "id": "audApps",
+        "page": "audio",
+        "type": "appmixer",
+        "label": "App outputs",
+        "description": "Every playing app as its own row — pick where each one sounds (live, per-app)",
+        "keywords": "app application per app route output sink mixer move discord firefox browser music video sound"
+    }, {
         "id": "audInVolume",
         "page": "audio",
-        "type": "knob",
+        "type": "cmdslider",
         "readCommand": ["pactl", "get-source-volume", "@DEFAULT_SOURCE@"],
         "writeCommand": ["pactl", "set-source-volume", "@DEFAULT_SOURCE@"],
         "min": 0,
@@ -855,12 +815,13 @@ Singleton {
         "step": 1,
         "suffix": "%",
         "label": "Input volume",
-        "description": "Turn the dial — 0–150%, writes land live (pactl)",
+        "description": "0–150%, writes land live (pactl) — no Apply needed",
         "keywords": "audio volume input microphone percent pactl"
     }, {
         "id": "audInMute",
         "page": "audio",
         "type": "cmdswitch",
+        "default": false,
         "readCommand": ["pactl", "get-source-mute", "@DEFAULT_SOURCE@"],
         "readTrue": "Mute: yes",
         "command": ["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"],
@@ -875,6 +836,14 @@ Singleton {
         "label": "Input devices",
         "description": "Every source PipeWire exposes — a pick makes it the default (pactl)",
         "keywords": "audio input device source default microphone headset"
+    },
+    {
+        "id": "audVoice",
+        "page": "audio",
+        "type": "voicecard",
+        "label": "Voice assistant",
+        "description": "Dictate into the session and hear replies — SUPER+D, off until you set it up",
+        "keywords": "voice assistant dictation speech whisper piper tts stt talk talkback super d reply spoken"
     }, {
         "id": "netWifi",
         "page": "network",
@@ -936,6 +905,7 @@ Singleton {
         "id": "pwrProfile",
         "page": "power",
         "type": "buttons",
+        "default": "balanced",
         "readCommand": ["powerprofilesctl", "get"],
         "options": [{
             "label": "Power saver",
@@ -995,6 +965,7 @@ Singleton {
         "id": "lkScreensaver",
         "page": "lock",
         "type": "buttons",
+        "default": 150,
         "readCommand": [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "screensaver"],
         "options": [{
             "label": "1 min",
@@ -1024,6 +995,7 @@ Singleton {
         "id": "ssStyle",
         "page": "lock",
         "type": "choice",
+        "default": "flip",
         "source": "settings",
         "key": "screensaver.style",
         "label": "Screensaver style",
@@ -1040,6 +1012,7 @@ Singleton {
         "id": "lkLockAfter",
         "page": "lock",
         "type": "buttons",
+        "default": 300,
         "readCommand": [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "lock"],
         "options": [{
             "label": "1 min",
@@ -1069,6 +1042,7 @@ Singleton {
         "id": "lkSleepAfter",
         "page": "lock",
         "type": "buttons",
+        "default": 1800,
         "readCommand": [Quickshell.shellDir + "/scripts/set-idle.sh", "get", "sleep"],
         "options": [{
             "label": "Never",
@@ -1107,6 +1081,7 @@ Singleton {
         "id": "sddmTheme",
         "page": "lock",
         "type": "buttons",
+        "default": "selah",
         "readCommand": [Quickshell.shellDir + "/scripts/selah-sddm.sh", "current"],
         "options": [{
             "label": "Selah",
@@ -1143,11 +1118,16 @@ Singleton {
         "type": "info",
         "value": "Auto",
         "label": "Wallpaper & palette",
-        "description": "The greeter re-syncs to your theme on every switch (switch-theme.sh hook)",
+        "description": "Always on — not a setting · the greeter re-syncs to your theme on every switch (switch-theme.sh hook)",
         "keywords": "sddm wallpaper palette colors sync greeter background theme match"
     }, {
+        "id": "secDateTime",
+        "page": "display",
+        "type": "section",
+        "label": "Date & Time"
+    }, {
         "id": "dtCard",
-        "page": "datetime",
+        "page": "display",
         "type": "timecard",
         "label": "Clock & date",
         "description": "Ticking time, NTP status and a searchable timezone picker (admin auth)",
@@ -1307,6 +1287,7 @@ Singleton {
         "id": "nvmNumber",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.number",
         "label": "Line numbers",
         "description": "Stored pref; applies via omasettings nvim set number (options.lua)",
@@ -1315,6 +1296,7 @@ Singleton {
         "id": "nvmRelNumber",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.relativeNumber",
         "label": "Relative line numbers",
         "description": "Stored pref; applies via omasettings nvim set relativenumber",
@@ -1323,6 +1305,7 @@ Singleton {
         "id": "nvmSign",
         "page": "nvim",
         "type": "buttons",
+        "default": "yes",
         "options": [{
             "label": "Always",
             "value": "yes",
@@ -1343,6 +1326,7 @@ Singleton {
         "id": "nvmWrap",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.wrap",
         "label": "Wrap long lines",
         "description": "Stored pref; applies via omasettings nvim set wrap",
@@ -1351,6 +1335,7 @@ Singleton {
         "id": "nvmCursorLine",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.cursorLine",
         "label": "Highlight the current line",
         "description": "Stored pref; applies via omasettings nvim set cursorline",
@@ -1360,21 +1345,22 @@ Singleton {
         "page": "nvim",
         "type": "info",
         "value": "—",
-        "label": "Column guide",
-        "description": "A column number, or empty for none · needs text row + omasettings nvim set colorcolumn",
+        "label": "Column guide (not wired)",
+        "description": "Static snapshot — nothing reads your config · astrocore.lua sets no colorcolumn (current: none) · needs text row",
         "keywords": "nvim vim colorcolumn column guide ruler text"
     }, {
         "id": "nvmScrolloff",
         "page": "nvim",
         "type": "info",
-        "value": "4",
-        "label": "Keep visible above and below",
-        "description": "0–20 lines · needs number row + omasettings nvim set scrolloff",
+        "value": "0",
+        "label": "Keep visible above and below (not wired)",
+        "description": "Static snapshot — astrocore.lua sets no scrolloff (current: 0) · needs number row",
         "keywords": "nvim vim scrolloff context lines number"
     }, {
         "id": "nvmSpell",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.spell",
         "label": "Spell checking",
         "description": "Stored pref; applies via omasettings nvim set spell",
@@ -1383,6 +1369,7 @@ Singleton {
         "id": "nvmExpandTab",
         "page": "nvim",
         "type": "switch",
+        "default": false,
         "key": "nvim.expandTab",
         "label": "Spaces instead of tabs",
         "description": "Stored pref; applies via omasettings nvim set expandtab",
@@ -1392,30 +1379,22 @@ Singleton {
         "page": "nvim",
         "type": "info",
         "value": "2",
-        "label": "Indent width",
-        "description": "1–8 spaces · needs number row + omasettings nvim set shiftwidth",
+        "label": "Indent width (not wired)",
+        "description": "Static snapshot — unset in astrocore.lua, follows the tab width (current: 2) · needs number row",
         "keywords": "nvim vim shiftwidth indent spaces number"
     }, {
         "id": "nvmTabstop",
         "page": "nvim",
         "type": "info",
         "value": "2",
-        "label": "Tab width",
-        "description": "1–8 spaces · needs number row + omasettings nvim set tabstop",
+        "label": "Tab width (not wired)",
+        "description": "Static snapshot — unset in astrocore.lua, AstroNvim ships 2 (current: 2) · needs number row",
         "keywords": "nvim vim tab tab width spaces number"
-    }, {
-        "id": "nvmEdit",
-        "page": "nvim",
-        "type": "action",
-        "command": ["bash", "-c", "omarchy-launch-config-editor \"$HOME/.config/nvim/lua/config/options.lua\""],
-        "verb": "Edit…",
-        "label": "The rest of the config",
-        "description": "Opens options.lua; changes apply next Neovim start · needs omarchy-launch-config-editor",
-        "keywords": "nvim vim options.lua edit config beyond"
     }, {
         "id": "wgMaster",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showWidgets",
         "label": "Desktop widgets",
         "description": "Master switch for everything below · double-click empty desktop or use Arrange to place them",
@@ -1438,6 +1417,7 @@ Singleton {
         "id": "wgClock",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showClock",
         "label": "Digital clock",
         "description": "The big time over the wallpaper",
@@ -1446,6 +1426,7 @@ Singleton {
         "id": "wgClockStyle",
         "page": "widgets",
         "type": "choice",
+        "default": "veil",
         "source": "settings",
         "key": "widgets.digitalClockStyle",
         "label": "Clock style",
@@ -1474,6 +1455,7 @@ Singleton {
         "id": "wgAnalog",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showAnalogClock",
         "label": "Analog clock",
         "description": "Face with hands · style below",
@@ -1482,6 +1464,7 @@ Singleton {
         "id": "wgAnalogStyle",
         "page": "widgets",
         "type": "choice",
+        "default": "classic",
         "source": "settings",
         "key": "widgets.analogClockStyle",
         "label": "Analog style",
@@ -1501,6 +1484,7 @@ Singleton {
         "id": "wgDate",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showDateWidget",
         "label": "Date",
         "description": "Day and date card · style below",
@@ -1509,6 +1493,7 @@ Singleton {
         "id": "wgDateStyle",
         "page": "widgets",
         "type": "choice",
+        "default": "bold",
         "source": "settings",
         "key": "widgets.dateWidgetStyle",
         "label": "Date style",
@@ -1533,6 +1518,7 @@ Singleton {
         "id": "wgWeatherForecast",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showWeatherForecast",
         "label": "Forecast",
         "description": "Three-day outlook from wttr.in",
@@ -1541,6 +1527,7 @@ Singleton {
         "id": "wgWeatherHourly",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showWeatherHourly",
         "label": "Hourly",
         "description": "Next hours strip with feels-like and UV",
@@ -1549,6 +1536,7 @@ Singleton {
         "id": "wgSunArc",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSunArc",
         "label": "Sun arc",
         "description": "Sunrise-to-sunset arc with the current position",
@@ -1557,6 +1545,7 @@ Singleton {
         "id": "wgMoonPhase",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMoonPhase",
         "label": "Moon phase",
         "description": "Current phase and illumination",
@@ -1565,6 +1554,7 @@ Singleton {
         "id": "wgWeatherShape",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showWeatherShape",
         "label": "Weather shape",
         "description": "Condition glyph on a Material shape",
@@ -1578,6 +1568,7 @@ Singleton {
         "id": "wgCalMini",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarMini",
         "label": "Mini",
         "description": "Compact month grid",
@@ -1586,6 +1577,7 @@ Singleton {
         "id": "wgCalYarn",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarYarn",
         "label": "Yarn",
         "description": "Month strip with today marked",
@@ -1594,6 +1586,7 @@ Singleton {
         "id": "wgCalAlmanac",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarAlmanac",
         "label": "Almanac",
         "description": "Dates, week number and daylight in one card",
@@ -1602,6 +1595,7 @@ Singleton {
         "id": "wgCalTorn",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarTorn",
         "label": "Torn",
         "description": "Torn-paper day page",
@@ -1610,6 +1604,7 @@ Singleton {
         "id": "wgCalWindows",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarWindows",
         "label": "Windows",
         "description": "Grid of upcoming day windows",
@@ -1618,6 +1613,7 @@ Singleton {
         "id": "wgCalDaylight",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarDaylight",
         "label": "Daylight",
         "description": "Today's light curve from sunrise to sunset",
@@ -1626,6 +1622,7 @@ Singleton {
         "id": "wgCalYear",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarYear",
         "label": "Year",
         "description": "Year progress with elapsed fraction",
@@ -1634,6 +1631,7 @@ Singleton {
         "id": "wgCalStamp",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarStamp",
         "label": "Stamp",
         "description": "Postage-stamp day tile",
@@ -1642,6 +1640,7 @@ Singleton {
         "id": "wgCalMoon",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showCalendarMoon",
         "label": "Moon calendar",
         "description": "Month with moon phases per day",
@@ -1655,6 +1654,7 @@ Singleton {
         "id": "wgTasks",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showTaskList",
         "label": "Tasks",
         "description": "Checklist over the bar's task store",
@@ -1663,6 +1663,7 @@ Singleton {
         "id": "wgSticky",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showStickyNote",
         "label": "Sticky note",
         "description": "One pinned note on the desktop",
@@ -1671,6 +1672,7 @@ Singleton {
         "id": "wgPomodoro",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showPomodoro",
         "label": "Pomodoro",
         "description": "Focus timer with the shell's pomodoro state",
@@ -1679,6 +1681,7 @@ Singleton {
         "id": "wgWorldClock",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showWorldClock",
         "label": "World clock",
         "description": "Other timezones in rows",
@@ -1692,6 +1695,7 @@ Singleton {
         "id": "wgMusicExpressive",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicExpressive",
         "label": "Expressive",
         "description": "Art, title and a wavy progress bar",
@@ -1700,6 +1704,7 @@ Singleton {
         "id": "wgMusicTicket",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicTicket",
         "label": "Ticket",
         "description": "Concert-ticket strip of the current track",
@@ -1708,6 +1713,7 @@ Singleton {
         "id": "wgMusicPoster",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicPoster",
         "label": "Poster",
         "description": "Album art as a poster with credits",
@@ -1716,6 +1722,7 @@ Singleton {
         "id": "wgMusicTuner",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicTuner",
         "label": "Radio tuner",
         "description": "Dial-styled now-playing",
@@ -1724,6 +1731,7 @@ Singleton {
         "id": "wgMusicWaveform",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicWaveform",
         "label": "Waveform",
         "description": "Track as a waveform line (no live audio needed)",
@@ -1732,6 +1740,7 @@ Singleton {
         "id": "wgMusicCapsule",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicCapsule",
         "label": "Capsule",
         "description": "Pill with art, title and transport",
@@ -1740,6 +1749,7 @@ Singleton {
         "id": "wgMusicGlance",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicGlance",
         "label": "Glance line",
         "description": "One-line now-playing",
@@ -1748,6 +1758,7 @@ Singleton {
         "id": "wgMusicFlap",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicFlap",
         "label": "Split-flap",
         "description": "Board that flips the title letter by letter",
@@ -1756,6 +1767,7 @@ Singleton {
         "id": "wgMusicBento",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicBento",
         "label": "Bento",
         "description": "Grid of art, track and level cells",
@@ -1764,6 +1776,7 @@ Singleton {
         "id": "wgMusicRibbon",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicRibbon",
         "label": "Edge ribbon",
         "description": "Ribbon hugging the screen edge",
@@ -1772,6 +1785,7 @@ Singleton {
         "id": "wgMusicNeon",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicNeon",
         "label": "Neon sign",
         "description": "Glowing sign of the current track",
@@ -1780,6 +1794,7 @@ Singleton {
         "id": "wgMusicTerminal",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showMusicTerminal",
         "label": "Terminal",
         "description": "Now-playing as terminal output",
@@ -1793,6 +1808,7 @@ Singleton {
         "id": "wgSysMonitor",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSystemMonitor",
         "label": "System monitor",
         "description": "CPU, memory and GPU graphs",
@@ -1801,6 +1817,7 @@ Singleton {
         "id": "wgSysMonitorStyle",
         "page": "widgets",
         "type": "choice",
+        "default": "default",
         "source": "settings",
         "key": "widgets.systemMonitorStyle",
         "label": "Monitor style",
@@ -1820,6 +1837,7 @@ Singleton {
         "id": "wgBattery",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showBattery",
         "label": "Battery",
         "description": "Charge gauge for the laptop battery",
@@ -1844,6 +1862,7 @@ Singleton {
         "id": "wgNetGraph",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showNetworkGraph",
         "label": "Network",
         "description": "Throughput graph with totals",
@@ -1852,6 +1871,7 @@ Singleton {
         "id": "wgSysCockpit",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysCockpit",
         "label": "Cockpit",
         "description": "Dials for CPU, memory, GPU and temps",
@@ -1860,6 +1880,7 @@ Singleton {
         "id": "wgSysBlueprint",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysBlueprint",
         "label": "Blueprint",
         "description": "Wireframe readout of every metric",
@@ -1868,6 +1889,7 @@ Singleton {
         "id": "wgSysVitals",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysVitals",
         "label": "Vitals",
         "description": "Live traces of CPU, memory and temperature",
@@ -1876,6 +1898,7 @@ Singleton {
         "id": "wgSysForecast",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysForecast",
         "label": "Forecast",
         "description": "Metric bars with a prediction tail",
@@ -1884,6 +1907,7 @@ Singleton {
         "id": "wgSysFlask",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysFlask",
         "label": "Flask",
         "description": "Metrics as filling levels",
@@ -1892,6 +1916,7 @@ Singleton {
         "id": "wgSysThermo",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysThermo",
         "label": "Thermometer",
         "description": "CPU and GPU temperatures",
@@ -1900,6 +1925,7 @@ Singleton {
         "id": "wgSysCreature",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysCreature",
         "label": "Creature",
         "description": "A creature fed by your load",
@@ -1908,6 +1934,7 @@ Singleton {
         "id": "wgSysCells",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysCells",
         "label": "Cell stack",
         "description": "Per-core activity cells",
@@ -1916,6 +1943,7 @@ Singleton {
         "id": "wgSysShape",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysShape",
         "label": "Shape shifter",
         "description": "System health as a morphing mood shape",
@@ -1924,6 +1952,7 @@ Singleton {
         "id": "wgSysHourglass",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysHourglass",
         "label": "Hourglass",
         "description": "Uptime and load as falling sand",
@@ -1932,6 +1961,7 @@ Singleton {
         "id": "wgSysFillNumber",
         "page": "widgets",
         "type": "switch",
+        "default": false,
         "key": "widgets.showSysFillNumber",
         "label": "Fill number",
         "description": "One big metric, pick which",

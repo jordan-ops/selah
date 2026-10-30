@@ -15,7 +15,7 @@ import QtQuick
 // This file owns STATE + ACTIONS only; Bar.qml's "polkit" pill mode
 // draws it (PolkitDialog.qml is deprecated). The
 // flow handling follows the two references this was built from:
-//   - omarchy backup shell PolkitAgent.qml: exclusive-focus overlay,
+//   - the original backup shell's PolkitAgent.qml: exclusive-focus overlay,
 //     shake on wrong password, Enter submits / Escape cancels, short
 //     close delay after success or cancel.
 //   - nothing_os Polkit.qml / PolkitDialog.qml: identity chips when the

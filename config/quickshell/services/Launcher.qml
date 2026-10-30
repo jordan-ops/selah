@@ -156,7 +156,7 @@ Singleton {
     }
 
     // both installer generations count as a web app: webapp-launch.sh
-    // URLs and the omarchy tool's chromium --app= launchers
+    // URLs and the upstream tool's chromium --app= launchers
     function isWebapp(e) {
         const x = (e != null && e.execString) || ""
         return x.includes("webapp-launch.sh") || x.includes("--app=")
@@ -210,7 +210,7 @@ Singleton {
         }).slice(0, s === "" ? 20 : 40).map(e => ({
             name: e.label,
             comment: pageMeta(e.page).name + " — " + (e.description || "Setting"),
-            icon: pageMeta(e.page).icon,
+            icon: "",
             execute: () => SettingsApp.show(e.page, e.id)
         }))
     }

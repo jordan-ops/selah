@@ -154,7 +154,7 @@ WidgetHost {
 
                 CustomText {
                     anchors.bottom: parent.bottom
-                    content: "nebula · up " + (root.si.uptime ?? "") + " · " + ServiceClock.hour + ":" + ServiceClock.minute
+                    content: "selah · up " + (root.si.uptime ?? "") + " · " + ServiceClock.hour + ":" + ServiceClock.minute
                     size: 12
                     family: root.mono
                     customColor: Colors.outlineVariant

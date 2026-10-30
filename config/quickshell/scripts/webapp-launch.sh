@@ -3,10 +3,11 @@
 # selah-webapp-launch — open a URL as a standalone app window (no browser
 # chrome, no tab strip), the way a native app would.
 #
-# Port of omarchy/bin/omarchy-launch-webapp, trimmed for this machine:
-#   * omarchy launches through `uwsm-app` to attach the window to the uwsm
-#     user session. uwsm is not installed here, so the browser is exec'd
-#     directly.
+# Adapted from omarchy/bin/omarchy-launch-webapp, rebranded to Selah and
+# trimmed for this machine:
+#   * the original launches through `uwsm-app` to attach the window to the
+#     uwsm user session. uwsm is not installed here, so the browser is
+#     exec'd directly.
 #   * everything else (default-browser lookup, hard fall back to chromium
 #     for anything that is not a Chromium-family browser) is kept as-is.
 #

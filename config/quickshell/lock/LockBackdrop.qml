@@ -49,8 +49,8 @@ Item {
         visible: !backdrop.softBlur
     }
 
-    // Blur parameters mirror omarchy's plugins/lock/LockView.qml — the
-    // source this lock was adapted from. autoPaddingEnabled MUST be false
+    // Blur parameters mirror the lock view this component was adapted
+    // from (plugins/lock/LockView.qml). autoPaddingEnabled MUST be false
     // here: Qt's own guidance is that with it on, a full-screen blur
     // "grows outside the window / screen". blurMultiplier rather than a
     // bigger blurMax, per the same performance note (bigger blurMax costs

@@ -1,6 +1,6 @@
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names the widget files bind on, backed by this shell's own
-// clock service — no Nebula backend travels with us.
+// clock service — no upstream backend travels with us.
 pragma Singleton
 
 import Quickshell
@@ -23,7 +23,7 @@ Singleton {
     property var year: Qt.formatDateTime(clock.date, "yyyy")
     property var date: Qt.formatDateTime(clock.date, "dd")
 
-    // Holidays — Nebula shelled out to its `nebula holidays` Python CLI
+    // Holidays — upstream shelled out to a Python holidays CLI
     // (Process + FileView cache + network fetch); that backend stays
     // behind, so the API shape survives with an always-empty answer.
     // Loaded/Attempted read true so consumers' retry guards settle
@@ -33,7 +33,7 @@ Singleton {
     property bool holidaysLoaded: true
     property bool holidayLoadAttempted: true
 
-    // Country detection lived in Nebula's settings — with no loader
+    // Country detection lived in upstream's settings — with no loader
     // there is nothing to detect one for
     readonly property string holidayCountry: ""
 

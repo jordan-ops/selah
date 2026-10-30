@@ -24,7 +24,7 @@ Singleton {
     id: root
 
     // ── widgets: the persisted blob ───────────────────────────────────
-    // Defaults mirror Nebula's SettingsConfig.widgets, minus the families
+    // Defaults mirror upstream's SettingsConfig.widgets, minus the families
     // we didn't port (personal/news/lyrics/spectrum/claude/photo) and with
     // positions kept for every ported family so nothing lands at 0,0.
     readonly property var defaults: ({

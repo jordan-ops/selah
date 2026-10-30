@@ -87,7 +87,7 @@ Item {
     property bool idleLoaded: false
 
     FileView {
-        path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+        path: Quickshell.env("HOME") + "/.config/selah/shell.json"
         printErrors: false
         watchChanges: true
         onFileChanged: reload()
@@ -315,6 +315,9 @@ Item {
     }
 
     function beginLock() {
+        // FAILSAFE gate (see the FileView below): never engage the lock
+        // without /etc/pam.d/qs-lock — a locked session that can't
+        // authenticate is TTY-recovery-only.
         if (!passwordPamConfigured) {
             logEvent("lock-denied: missing-pam")
             notifyMissingPam.running = true
@@ -324,6 +327,18 @@ Item {
         resetAuthenticationState()
         lockRequested = true
         logEvent("lock-requested")
+        // belt-and-suspenders: the gate above ran a few statements ago,
+        // and the FileView watch flips passwordPamConfigured the moment
+        // qs-lock-pam's file appears/disappears — re-check immediately
+        // before touching the compositor lock, so the Oct 20 crash-loop
+        // class (show surfaces without an active/valid lock) can't come
+        // back through a stale true here.
+        if (!passwordPamConfigured) {
+            lockRequested = false
+            logEvent("lock-denied: missing-pam (recheck)")
+            notifyMissingPam.running = true
+            return false
+        }
         sessionLock.locked = true
         // The lock replaces the screensaver in the idle chain: kill the
         // pipes.sh runners so they don't keep burning CPU behind the
@@ -453,8 +468,17 @@ Item {
 
     // hyprland keeps the session lock after the locking client dies
     // (crash, or quickshell hot-reload while locked) — no UI to unlock
-    // would be left. Re-engage immediately on start. Same recovery
-    // omarchy's lock plugin does with its stranded-lock check.
+    // would be left. Re-engage immediately on start — same recovery
+    // the lock plugin this file was adapted from (line 18) performs.
+    //
+    // Oct 20 incident: this used to jump straight to beginLock() while
+    // the compositor still held the DEAD client's lock. hyprland then
+    // DENIED the new lock request → quickshell FATAL "Tried to show
+    // lockscreen surfaces without active lock" → the shell died on
+    // every start, a full crash loop. The fix is ordering: wipe the
+    // compositor's crashed-lock bookkeeping FIRST (clearCrashedLock,
+    // stage two below), and only then re-engage. beginLock() here is
+    // therefore never called directly anymore.
     Process {
         id: strandedLockCheck
         running: true
@@ -465,8 +489,27 @@ Item {
         onExited: exitCode => {
             if (exitCode === 0 && !root.locked) {
                 root.logEvent("lock-stranded: recovering")
-                root.beginLock()
+                clearCrashedLock.running = true   // beginLock only AFTER the clear exits
             }
+        }
+    }
+
+    // Stage two of the stranded-lock recovery (see above): tell the
+    // compositor to drop the dead client's lock state —
+    // `hyprctl eval 'hl.clear_crashed_lockscreen()'` returns "ok" on
+    // success — and only then re-engage the lock. If the clear fails
+    // (older hyprland without the API, a deny) log it and still make a
+    // best-effort beginLock(): the alternative is a session stranded on
+    // a lock with no client, and beginLock's own PAM gate plus the
+    // compositor's denial both fail safe from there.
+    Process {
+        id: clearCrashedLock
+        command: ["hyprctl", "eval", "hl.clear_crashed_lockscreen()"]
+        onExited: exitCode => {
+            if (exitCode !== 0)
+                root.logEvent("lock-stranded: clear-crashed-lockscreen failed code="
+                    + exitCode + "; attempting beginLock anyway")
+            root.beginLock()
         }
     }
 

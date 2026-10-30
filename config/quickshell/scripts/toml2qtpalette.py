@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive a qt5ct/qt6ct color scheme from an omarchy colors.toml.
+"""Derive a qt5ct/qt6ct color scheme from a theme's colors.toml.
 
 Both ct utilities read one palette format: [ColorScheme] with
 active/inactive/disabled_colors, each a comma-separated list of 21
@@ -12,7 +12,7 @@ list and derives Accent from Highlight itself, while qt5ct insists on
 exactly NColorRoles (21) entries — so one file serves both and
 switch-theme.sh symlinks the qt5ct copy to the qt6ct one.
 
-Roles come from the flat omarchy palette with the same fallback chains
+Roles come from the flat Selah palette with the same fallback chains
 as toml2colors.py, so themes missing optional keys still yield a
 complete scheme. mode splits the surface geometry: in dark themes
 inputs/buttons sit *lighter* than the window, in light themes they sit
@@ -88,7 +88,7 @@ def main():
     foreground = rgb(pick(colors, "foreground", "fg", default="#ffffff"))
     muted = rgb(pick(colors, "muted", default="#ffffff"))
     accent = rgb(pick(colors, "accent", default="#1db954"))
-    # omarchy's surface keys: lighter_background/dark_background are the
+    # the theme's surface keys: lighter_background/dark_background are the
     # canonical spelling, *_bg the aether alias — the theme set uses both.
     lighter = rgb(pick(colors, "lighter_background", "lighter_bg",
                        default=lighten(window, 0.09) if not light else darken(window, 0.07)))

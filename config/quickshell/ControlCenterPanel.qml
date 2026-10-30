@@ -385,13 +385,13 @@ Rectangle {
                     onToggled: Services.KeepAwake.toggle()
                 }
 
-                // Screen saver on/off — omarchy's screensaver-off flag,
-                // the file `omarchy toggle screensaver` writes. Off also
-                // kills a running saver on the spot — flip clock or
-                // pipes.sh terminals alike: either way, CPU this tile
-                // exists to silence. Right click runs one NOW regardless
-                // of the flag (the launcher's `force`, same as System >
-                // Screensaver).
+                // Screen saver on/off — the on/off flag services/Screensaver
+                // owns (the same on-disk toggle the pipes runner refuses to
+                // start while it exists). Off also kills a running saver on
+                // the spot — flip clock or pipes.sh terminals alike: either
+                // way, CPU this tile exists to silence. Right click runs one
+                // NOW regardless of the flag (the launcher's `force`, same
+                // as System > Screensaver).
                 SquareToggle {
                     icon: "\u{F0904}" // nf-md-power_sleep
                     label: "Screen Saver"

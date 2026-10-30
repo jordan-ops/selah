@@ -1,6 +1,6 @@
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names the widget files bind on, backed by this shell's own
-// tasks service — no Nebula backend travels with us.
+// tasks service — no upstream backend travels with us.
 pragma Singleton
 
 import Quickshell
@@ -10,7 +10,7 @@ import "../services" as Services
 Singleton {
     id: root
 
-    // Nebula's todo shape is richer than our {id, text, done} rows; the
+    // Upstream's todo shape is richer than our {id, text, done} rows; the
     // fields we can't answer ship empty. items is reassigned (never
     // mutated) on every change, so the mapping binding re-fires then.
     readonly property var todos: Services.Tasks.items.map(t => ({

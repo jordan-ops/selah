@@ -80,7 +80,7 @@ Variants {
             border.color: Services.Colors.low
             border.width: 1
 
-            // wrong-password shake target (omarchy's shakeOffset pattern)
+            // wrong-password shake target (the original's shakeOffset pattern)
             property real shakeOffset: 0
 
             opacity: win.owns ? 1 : 0

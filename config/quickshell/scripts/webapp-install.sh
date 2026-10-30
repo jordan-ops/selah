@@ -8,13 +8,14 @@
 #   webapp-install.sh <name> <url> <icon>   icon: url | path | name
 #   webapp-install.sh <name> <url> <icon> <custom-exec> [mime-types]
 #
-# Port of omarchy/bin/omarchy-webapp-install. Deliberately kept: every
-# validation helper below is a fix for a specific bug (see the comments on
-# each — require_plain_name and desktop_string_escape in particular stop
-# path traversal and desktop-entry injection). Changed from omarchy:
+# Adapted from omarchy/bin/omarchy-webapp-install, rebranded to Selah.
+# Deliberately kept: every validation helper below is a fix for a specific
+# bug (see the comments on each — require_plain_name and
+# desktop_string_escape in particular stop path traversal and
+# desktop-entry injection). Changed from the original:
 #   * gum (interactive prompt UI) is not installed here -> plain read
-#   * omarchy-launch-webapp -> this directory's webapp-launch.sh, by
-#     absolute path, because ~/.local/bin is not on $PATH
+#   * the upstream webapp launcher -> this directory's webapp-launch.sh,
+#     by absolute path, because ~/.local/bin is not on $PATH
 
 set -e
 

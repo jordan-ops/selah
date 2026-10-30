@@ -8,19 +8,19 @@ import QtQuick
 // styles behind one service, after 150 s of no input by default:
 //   flip  — FlipClock.qml in THIS process (default): a Fliqlo-style
 //           split-flap clock, static between minute flips, ~0 CPU at rest
-//   pipes — the original omarchy path: a terminal per monitor running
-//           pipes.sh (~0.9 of a core while it runs), runner in
-//           ~/.local/bin/omarchy-launch-screensaver
-// This singleton owns the two triggers omarchy has — idle, and
+//   pipes — a terminal per monitor running pipes.sh (~0.9 of a core
+//           while it runs), runner in ~/.local/bin/selah-launch-screensaver
+//           (adapted from omarchy's screensaver, 2026-10-20)
+// This singleton owns the two triggers this shell has — idle, and
 // on-demand — plus the style switch and the on/off flag behind the
 // Control Center's Screen Saver tile.
 Singleton {
     id: root
 
-    // omarchy's default from shell.json ("idle": { "screensaver": 150 }),
-    // live: the settings app's "Screensaver after" chips write the same
-    // file through scripts/set-idle.sh and this watch re-arms the
-    // IdleMonitor below — no shell restart to move the timeout.
+    // shell.json's idle.screensaver governs this (the 150 s QML default
+    // holds until the file loads); the settings app's "Screensaver after"
+    // chips write the same file through scripts/set-idle.sh and this watch
+    // re-arms the IdleMonitor below — no shell restart to move the timeout.
     property int idleSeconds: 150
     // async-load gate + recreation switch for saverIdle — same two as
     // LockScreen.qml (idleLoaded/idleArmed): without the gate the
@@ -30,7 +30,7 @@ Singleton {
     property bool saverArmed: true
 
     FileView {
-        path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+        path: Quickshell.env("HOME") + "/.config/selah/shell.json"
         printErrors: false
         watchChanges: true
         onFileChanged: reload()
@@ -51,13 +51,14 @@ Singleton {
     // ~/.local/bin is deliberately not on PATH in this setup (.bashrc), so
     // everything here is addressed by absolute path rather than by name.
     // Pipes style only — the flip clock never leaves this process.
-    readonly property string launcher: Quickshell.env("HOME") + "/.local/bin/omarchy-launch-screensaver"
+    readonly property string launcher: Quickshell.env("HOME") + "/.local/bin/selah-launch-screensaver"
 
-    // omarchy's on/off flag — the same file `omarchy toggle screensaver`
-    // writes; the launcher refuses while it exists. In-memory mirror so
+    // The on/off flag — screensaver-off under ~/.local/state/selah/toggles,
+    // the file `selah toggle screensaver` would write; the launcher refuses
+    // while it exists. In-memory mirror so
     // the Control Center tile has a bindable state: seeded from disk by
     // the probe below, then this service is the only writer.
-    readonly property string flagDir: Quickshell.env("HOME") + "/.local/state/omarchy/toggles"
+    readonly property string flagDir: Quickshell.env("HOME") + "/.local/state/selah/toggles"
     readonly property string flagFile: flagDir + "/screensaver-off"
     property bool enabled: true
 
@@ -153,14 +154,14 @@ Singleton {
             Quickshell.execDetached(["rm", "-f", root.flagFile])
         } else {
             Quickshell.execDetached(["sh", "-c",
-                "mkdir -p \"$HOME/.local/state/omarchy/toggles\" && touch \"$HOME/.local/state/omarchy/toggles/screensaver-off\""])
+                "mkdir -p \"$HOME/.local/state/selah/toggles\" && touch \"$HOME/.local/state/selah/toggles/screensaver-off\""])
             root.dismiss()
             root.stopRunner()
         }
     }
 
     function stopRunner() {
-        Quickshell.execDetached(["pkill", "-f", "[o]marchy-screensaver"])
+        Quickshell.execDetached(["pkill", "-f", "[s]elah-screensaver"])
     }
 
     // Re-create the wayland notification so its countdown starts over —
@@ -237,8 +238,8 @@ Singleton {
         // binds on the derived `active`
         function started(): void { root.runnerActive = true }
         function stopped(): void { root.runnerActive = false }
-        // on demand, honoring omarchy's screensaver-off flag file —
-        // the style decides which surface appears. Returns the gate
+        // on demand, honoring the screensaver-off flag file — the style
+        // decides which surface appears. Returns the gate
         // state so a no-op says WHICH gate said no.
         function launch(): string {
             const pre = `en=${root.enabled} flip=${root.styleFlip}` +
@@ -247,7 +248,7 @@ Singleton {
             return pre + ` -> internal=${root.internalActive}` +
                 ` active=${root.active}`
         }
-        // past the flag — omarchy's System > Screensaver action, and
+        // past the flag — the Settings app's Screensaver action, and
         // the Control Center tile's right click
         function force() { root.startSaver(true) }
         // dismiss the flip clock AND kill the runner (its trap restores

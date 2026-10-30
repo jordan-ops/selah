@@ -1,17 +1,17 @@
 import QtQuick
+import QtQuick.Controls   // ToolTip attached property on the name + hero
 import Quickshell
 import Quickshell.Io
 import "./services" as Services
 
-// Carousel control — the `carousel` row type. Adapts the shell's M3
-// center-aligned hero carousel (PillThemeContent / PillWallpaperContent
-// in the pill pickers) to the settings renderer as a power-style CARD:
-// the delegate's label block (Theme / Wallpaper + hint) sits at the row
-// top, a 50px head clears it, then the card shell holds the LARGE
-// ‹ small · hero · small › strip with the name beside it. Arrows step
-// the selection (preview only — switching runs the whole system retint,
-// so it stays click-to-apply via the hero, through Themes.apply /
-// Wallpapers.apply).
+// Carousel control — the `carousel` row type. The macOS Wallpaper-pane
+// layout: ONE large click-to-apply preview of the current selection
+// (accent ring, the whole point of the card), the name under it, and a
+// wrapped strip of neighbour thumbnails below — click a thumb to move
+// the selection, click the hero to APPLY it (a full switch runs the
+// system retint / wallpaper commit, so it stays deliberate — same
+// apply-through-Themes/Wallpapers contract as the old hero strip, just
+// with five visible neighbours instead of two).
 Item {
     id: root
 
@@ -30,6 +30,15 @@ Item {
     // then reads undefined and QML warns on the QString assign
     readonly property string selName: (list.length > 0 && sel < list.length)
                                       ? list[sel] : ""
+    // what the name line shows: themes by name, wallpapers by file name
+    // (the full path stays on the hover tooltip — it's informative, but
+    // it drowned the card when set inline)
+    readonly property string displayName: {
+        if (selName === "") return ""
+        if (themes) return selName
+        const i = selName.lastIndexOf("/")
+        return i >= 0 ? selName.slice(i + 1) : selName
+    }
 
     // card layout — SettingsWindow sizes rows as 64 + extraHeight; the
     // column height already includes the 50px label-block head, so the
@@ -37,17 +46,15 @@ Item {
     height: col.implicitHeight
     readonly property real extraHeight: col.implicitHeight - 64
 
-    // the large hero strip — the title lives in the row's label block
-    readonly property real heroW: 210
-    readonly property real heroH: 116
-    readonly property real smallW: 64
-    readonly property real smallH: 116
+    readonly property real heroH: 148
+    readonly property real thumbH: 58
+    readonly property int thumbCount: Math.min(5, Math.max(1, list.length))
 
     function step(delta) {
-        // stepping only MOVES the selection — no theme work per arrow:
-        // a full switch runs ~0.7s of python/gsettings/foot retint and
-        // stacking that on every step felt slow and memory-hungry. Click
-        // the hero to apply.
+        // thumbs only MOVE the selection — no theme work per click: a
+        // full switch runs ~0.7s of python/gsettings/foot retint and
+        // stacking that on every hop felt slow. Click the hero to apply.
+        if (list.length < 2) return
         if (themes) Services.Themes.moveSelection(delta)
         else Services.Wallpapers.moveSelection(delta)
     }
@@ -55,6 +62,33 @@ Item {
         if (list.length === 0) return
         if (themes) Services.Themes.apply(list[sel])
         else Services.Wallpapers.apply(list[sel])
+    }
+
+    // the hero's own art — thrown out and settled back on every step,
+    // source swapped while invisible (same M3 move the old strip used)
+    property int heroDir: 1
+    property int heroLastSel: -1
+    onSelChanged: {
+        if (heroLastSel < 0) { heroLastSel = sel; return }
+        let d = sel - heroLastSel
+        const n = Math.max(1, list.length)
+        if (d > n / 2) d -= n
+        else if (d < -n / 2) d += n
+        heroDir = d >= 0 ? 1 : -1
+        heroLastSel = sel
+        heroSwap.restart()
+    }
+
+    // slot art: theme screenshot (or, for themes that have never been
+    // shot, the theme's own wallpaper), palette stripes as the last
+    // resort; wallpaper photo for the wallpaper row
+    function artOf(name) {
+        if (name === "") return ""
+        if (!root.themes) return "file://" + name
+        const shot = Services.Themes.previewOf[name]
+        if (shot) return "file://" + shot
+        const wall = Services.Themes.wallpaperOf[name]
+        return wall ? "file://" + wall : ""
     }
 
     Column {
@@ -66,307 +100,257 @@ Item {
 
         Rectangle {
             width: col.width
-            height: stripRow.height + 28
+            height: cardCol.implicitHeight + 28
             radius: 16
             color: Services.Colors.surface
             border.color: Services.Colors.low
             border.width: 1
 
-            Row {
-                id: stripRow
-                anchors.horizontalCenter: parent.horizontalCenter
+            Column {
+                id: cardCol
+                anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.topMargin: 14
-                spacing: 6
+                spacing: 10
 
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 24
-            height: 24
-            radius: 12
-            color: backL.containsMouse ? Services.Colors.surfaceAlt : Services.Colors.surface
+                // ——— the big preview ——— click to apply
+                Rectangle {
+                    id: hero
+                    width: cardCol.width
+                    height: root.heroH
+                    radius: 12
+                    clip: true
+                    color: Services.Colors.surfaceAlt
+                    border.color: Services.Colors.accent
+                    border.width: 2
+                    property real dx: 0
+                    property string shownName: root.selName
+                    x: dx
 
-            Behavior on color {
-                ColorAnimation {
-                    duration: Services.Motion.effectsFast
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                }
-            }
-            Text {
-                font.family: Services.Fonts.family
-                anchors.centerIn: parent
-                text: "‹"
-                font.pixelSize: 16
-                font.bold: true
-                color: Services.Colors.text
-            }
-            MouseArea {
-                id: backL
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.step(-1)
-            }
-        }
+                    // theme palette for the stripe fallback (ids resolve
+                    // through scope; the stripe delegates reference this
+                    // as hero.themeData)
+                    property var themeData: ({})
 
-        // three-slot strip: prev · hero · next, wrapped
-        Item {
-            anchors.verticalCenter: parent.verticalCenter
-            width: root.smallW * 2 + root.heroW + 12
-            height: root.heroH
-            clip: true
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 6
-
-                Repeater {
-                    model: root.list.length > 1 ? 3 : (root.list.length === 1 ? 1 : 0)
-
-                    delegate: Item {
-                        id: slot
-                        readonly property int slotIdx: index      // 0 prev, 1 hero, 2 next
-                        readonly property int wrap: (root.sel + slotIdx - 1 + root.list.length) % Math.max(1, root.list.length)
-                        readonly property string name: (root.list.length > 0 && wrap >= 0 && wrap < root.list.length)
-                            ? root.list[wrap] : ""   // bounds-guarded like selName (stale wrap vs shrunken list)
-                        readonly property bool hero: slotIdx === 1 || root.list.length < 3
-
-                        // step direction (+1 = next, contents advance →
-                        // throw left) — derived from how the wrap index
-                        // moved, normalized across list ends
-                        property int dir: 1
-                        property int lastWrap: -1
-                        property bool ready: false
-                        Component.onCompleted: { lastWrap = wrap; ready = true }
-                        onWrapChanged: {
-                            if (!ready) return
-                            let d = wrap - lastWrap
-                            const n = Math.max(1, root.list.length)
-                            if (d > n / 2) d -= n
-                            else if (d < -n / 2) d += n
-                            dir = d >= 0 ? 1 : -1
-                            lastWrap = wrap
-                            // ids resolve through scope, NOT as object
-                            // properties — `card.swap` is undefined (only
-                            // QObject properties resolve that way) and
-                            // silently threw, so the step transition never
-                            // actually ran before this fix
-                            swap.restart()
+                    Image {
+                        id: heroPic
+                        anchors.fill: parent
+                        source: root.artOf(hero.shownName)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 800
+                        visible: status === Image.Ready
+                    }
+                    FileView {
+                        printErrors: false
+                        path: root.themes && hero.shownName !== ""
+                            ? Quickshell.env("HOME") + "/.config/themes/" + hero.shownName + "/quickshell/colors.json"
+                            : ""
+                        onLoaded: {
+                            try { hero.themeData = JSON.parse(text()) } catch (e) {}
                         }
+                    }
+                    Row {
+                        anchors.fill: parent
+                        visible: root.themes && heroPic.status !== Image.Ready
+                        Repeater {
+                            model: ["primary", "secondary_container", "on_background", "background"]
+                            Rectangle {
+                                width: hero.width / 4
+                                height: hero.height
+                                color: {
+                                    const md3 = hero.themeData.md3
+                                    return (md3 && md3[modelData]) || Services.Colors.surfaceAlt
+                                }
+                            }
+                        }
+                    }
 
-                        width: hero ? root.heroW : root.smallW
-                        height: hero ? root.heroH : root.smallH
+                    SequentialAnimation {
+                        id: heroSwap
+                        ParallelAnimation {
+                            NumberAnimation {
+                                target: hero; property: "dx"
+                                to: -root.heroDir * 18
+                                duration: Services.Motion.short1
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Services.Motion.emphasizedAccelerate
+                            }
+                            NumberAnimation {
+                                target: hero; property: "opacity"
+                                to: 0
+                                duration: Services.Motion.short1
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Services.Motion.emphasizedAccelerate
+                            }
+                        }
+                        ScriptAction { script: hero.shownName = root.selName }
+                        PropertyAction {
+                            target: hero; property: "dx"
+                            value: root.heroDir * 18
+                        }
+                        ParallelAnimation {
+                            SpringAnimation {
+                                target: hero; property: "dx"
+                                to: 0
+                                spring: Services.Motion.bounceSpring
+                                damping: Services.Motion.bounceDamping
+                            }
+                            NumberAnimation {
+                                target: hero; property: "opacity"
+                                to: 1
+                                duration: Services.Motion.effects
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.applyCurrent()
+                    }
+                    ToolTip.visible: heroHover.containsMouse && root.selName !== ""
+                    ToolTip.delay: 400
+                    ToolTip.text: "Apply " + root.selName
+                    HoverHandler { id: heroHover }
+                }
+
+                // ——— name + hint ——— the roll-up swap on every step
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 6
+
+                    Text {
+                        id: nameText
+                        font.family: Services.Fonts.family
+                        text: root.displayName
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: Services.Colors.text
+                        elide: Text.ElideRight
+                        width: Math.min(implicitWidth, cardCol.width - 160)
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: "Selected: " + root.selName
+
+                        HoverHandler { id: nameHover }
+                        // truncated names ("aether-defa…") get the full
+                        // string on hover instead of a filesystem trip
+                        ToolTip.visible: !!nameHover.containsMouse && !!nameText.truncated
+                        ToolTip.delay: 400
+                        ToolTip.text: root.selName
+
+                        property real rollY: 0
+                        property bool ready: false
+                        Component.onCompleted: ready = true
+                        onTextChanged: if (ready) rollAnim.restart()
+
+                        SequentialAnimation {
+                            id: rollAnim
+                            ParallelAnimation {
+                                PropertyAction { target: nameText; property: "rollY"; value: 10 }
+                                PropertyAction { target: nameText; property: "opacity"; value: 0 }
+                            }
+                            ParallelAnimation {
+                                SpringAnimation {
+                                    target: nameText; property: "rollY"
+                                    to: 0
+                                    spring: Services.Motion.bounceSpring
+                                    damping: Services.Motion.bounceDamping
+                                }
+                                NumberAnimation {
+                                    target: nameText; property: "opacity"
+                                    to: 1
+                                    duration: Services.Motion.effects
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                }
+                            }
+                        }
+                        // roll offset rides the row's baseline
                         anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: rollY
+                    }
 
-                        Rectangle {
-                            id: card
-                            anchors.centerIn: parent
-                            anchors.horizontalCenterOffset: dx
-                            width: parent.width
-                            height: parent.height
-                            radius: 12
-                            clip: true
-                            color: Services.Colors.surface
-                            border.color: hero ? Services.Colors.accent : Services.Colors.low
-                            border.width: hero ? 1 : 0
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        font.family: Services.Fonts.family
+                        text: "·  click the preview to apply"
+                        font.pixelSize: 10
+                        color: Services.Colors.textMuted
+                        visible: root.list.length > 0
+                    }
+                }
 
-                            // slide offset for the step transition
-                            property real dx: 0
-                            // this slot's OWN item — swapped under cover of
-                            // the fade so the outgoing art can throw out first
-                            property string shownName: name
+                // ——— thumbnail strip ——— wrapped window of neighbours,
+                // the current one accent-ringed; click = move selection
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8
 
-                            // active theme's palette (colors.json md3) for the
-                            // stripe fallback. Referenced as card.themeData:
-                            // the stripe Repeater's delegate has its own scope
-                            // and cannot see this unqualified (ids still work).
-                            property var themeData: ({})
-                            // slot art: theme screenshot (or, for themes that
-                            // have never been shot, the theme's own wallpaper),
-                            // palette stripes as the last resort; wallpaper
-                            // photo for the wallpaper row
-                            Image {
-                                id: pic
-                                anchors.fill: parent
-                                source: {
-                                    if (card.shownName === "") return ""
-                                    if (!root.themes) return "file://" + card.shownName
-                                    const shot = Services.Themes.previewOf[card.shownName]
-                                    if (shot) return "file://" + shot
-                                    const wall = Services.Themes.wallpaperOf[card.shownName]
-                                    return wall ? "file://" + wall : ""
-                                }
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                sourceSize.width: 640
-                                visible: status === Image.Ready
-                            }
-                            FileView {
-                                printErrors: false
-                                path: root.themes && card.shownName !== ""
-                                    ? Quickshell.env("HOME") + "/.config/themes/" + card.shownName + "/quickshell/colors.json"
-                                    : ""
-                                onLoaded: {
-                                    try { card.themeData = JSON.parse(text()) } catch (e) {}
-                                }
-                            }
-                            Row {
-                                anchors.fill: parent
-                                visible: root.themes && pic.status !== Image.Ready
-                                Repeater {
-                                    model: ["primary", "secondary_container", "on_background", "background"]
-                                    Rectangle {
-                                        width: card.width / 4
-                                        height: card.height
-                                        color: {
-                                            const md3 = card.themeData.md3
-                                            return (md3 && md3[modelData]) || Services.Colors.surfaceAlt
-                                        }
-                                    }
-                                }
-                            }
-                            // small slots: dimmer tint so the hero reads as focal
+                    Repeater {
+                        model: root.list.length > 0 ? root.thumbCount : 0
+
+                        delegate: Item {
+                            id: thumb
+                            required property int index
+                            readonly property int off: index - Math.floor(root.thumbCount / 2)
+                            readonly property int wrap: (root.sel + off + root.list.length)
+                                % Math.max(1, root.list.length)
+                            readonly property string name: (wrap >= 0 && wrap < root.list.length)
+                                ? root.list[wrap] : ""   // bounds-guarded like selName
+                            readonly property bool current: off === 0
+
+                            width: (cardCol.width - 28 - (root.thumbCount - 1) * 8) / root.thumbCount
+                            height: root.thumbH
+
                             Rectangle {
                                 anchors.fill: parent
-                                color: Services.Colors.background
-                                opacity: hero ? 0 : 0.35
-                            }
+                                radius: 8
+                                clip: true
+                                color: Services.Colors.surfaceAlt
+                                border.color: thumb.current ? Services.Colors.accent
+                                                            : Services.Colors.low
+                                border.width: thumb.current ? 2 : 1
 
-                            // snappy M3 step transition: the outgoing art
-                            // throws out in the step direction (fade +
-                            // slide), the source swaps while invisible,
-                            // the new art settles back in from the other
-                            // side — total 200ms
-                            SequentialAnimation {
-                                id: swap
-                                ParallelAnimation {
-                                    NumberAnimation {
-                                        target: card; property: "dx"
-                                        to: -slot.dir * 18
-                                        duration: Services.Motion.short1
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.emphasizedAccelerate
-                                    }
-                                    NumberAnimation {
-                                        target: card; property: "opacity"
-                                        to: 0
-                                        duration: Services.Motion.short1
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.emphasizedAccelerate
-                                    }
+                                Image {
+                                    anchors.fill: parent
+                                    source: root.artOf(thumb.name)
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    sourceSize.width: 320
+                                    visible: status === Image.Ready
                                 }
-                                ScriptAction { script: card.shownName = slot.name }
-                                PropertyAction {
-                                    target: card; property: "dx"
-                                    value: slot.dir * 18
-                                }
-                                ParallelAnimation {
-                                    // the new art settles with a spring —
-                                    // overshoots its slot a hair, snaps back
-                                    SpringAnimation {
-                                        target: card; property: "dx"
-                                        to: 0
-                                        spring: Services.Motion.bounceSpring
-                                        damping: Services.Motion.bounceDamping
-                                    }
-                                    NumberAnimation {
-                                        target: card; property: "opacity"
-                                        to: 1
-                                        duration: Services.Motion.effects
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                // dim the neighbours so the current reads
+                                // as the selection (thaws on hover)
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: Services.Colors.background
+                                    opacity: thumb.current ? 0
+                                        : (thumbMa.containsMouse ? 0.25 : 0.5)
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: Services.Motion.effectsFast
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Services.Motion.emphasizedDecelerate
+                                        }
                                     }
                                 }
                             }
 
                             MouseArea {
+                                id: thumbMa
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (hero) root.applyCurrent()
-                                    else root.step(slotIdx === 0 ? -1 : 1)
-                                }
+                                enabled: !thumb.current && root.list.length > 1
+                                onClicked: root.step(thumb.off)
                             }
                         }
                     }
                 }
-            }
-        }
-
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 24
-            height: 24
-            radius: 12
-            color: backR.containsMouse ? Services.Colors.surfaceAlt : Services.Colors.surface
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: Services.Motion.effectsFast
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                }
-            }
-            Text {
-                font.family: Services.Fonts.family
-                anchors.centerIn: parent
-                text: "›"
-                font.pixelSize: 16
-                font.bold: true
-                color: Services.Colors.text
-            }
-            MouseArea {
-                id: backR
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.step(1)
-            }
-        }
-
-        Text {
-            font.family: Services.Fonts.family
-            id: nameText
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: rollY
-            width: 96
-            text: root.selName
-            font.pixelSize: 13
-            font.bold: true
-            color: Services.Colors.text
-            elide: Text.ElideRight
-
-            // roll-up swap on every step — starts below/transparent and
-            // settles in with the same emphasized decelerate as the art
-            property real rollY: 0
-            property bool ready: false
-            Component.onCompleted: ready = true
-            onTextChanged: if (ready) rollAnim.restart()
-
-            SequentialAnimation {
-                id: rollAnim
-                ParallelAnimation {
-                    PropertyAction { target: nameText; property: "rollY"; value: 10 }
-                    PropertyAction { target: nameText; property: "opacity"; value: 0 }
-                }
-                ParallelAnimation {
-                    SpringAnimation {
-                        target: nameText; property: "rollY"
-                        to: 0
-                        spring: Services.Motion.bounceSpring
-                        damping: Services.Motion.bounceDamping
-                    }
-                    NumberAnimation {
-                        target: nameText; property: "opacity"
-                        to: 1
-                        duration: Services.Motion.effects
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                    }
-                }
-            }
-        }
             }
         }
     }

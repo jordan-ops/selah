@@ -5,10 +5,11 @@
 #   webapp-remove.sh              prompts with a numbered list
 #   webapp-remove.sh <name>       removes that one
 #
-# Port of omarchy/bin/omarchy-webapp-remove. Kept as-is: the removal targets
-# are discovered by scanning for OUR launcher in Exec=, never rebuilt from the
-# typed name — a name rebuilt from display text cannot reach a launcher that
-# was nested in a directory, and those are exactly the stuck ones.
+# Adapted from omarchy/bin/omarchy-webapp-remove, rebranded to Selah.
+# Kept as-is: the removal targets are discovered by scanning for OUR
+# launcher in Exec=, never rebuilt from the typed name — a name rebuilt
+# from display text cannot reach a launcher that was nested in a
+# directory, and those are exactly the stuck ones.
 
 set -e
 

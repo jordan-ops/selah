@@ -12,13 +12,13 @@ fi
 mkdir -p "$HOME/.local/state/quickshell"
 printf '%s\n' "$THEME" > "$HOME/.local/state/quickshell/current-theme"
 
-# omarchy themes ship colors.toml, not ready-made derived configs —
+# Selah themes ship colors.toml, not ready-made derived configs —
 # derive quickshell's colors.json (the md3 keys services/Colors.qml
 # reads) and qt5ct/qt6ct's selah scheme (toml2qtpalette.py) before the
 # copy loop below ships them. Cached per theme: only regenerate when
 # colors.toml is newer than a derived file or the file is missing, so
-# re-switching a theme skips the python passes entirely (omarchy caches
-# everything it can between switches).
+# re-switching a theme skips the python passes entirely (we cache
+# everything we can between switches).
 if [ -f "$SRC/colors.toml" ] && {
     [ ! -f "$SRC/quickshell/colors.json" ] || [ "$SRC/colors.toml" -nt "$SRC/quickshell/colors.json" ] ||
     [ ! -f "$SRC/quickshell/qtcolors.conf" ]
@@ -99,13 +99,13 @@ fi
 
 # The instant-feedback half is already done by here: colors.json recolored
 # the shell in the copy loop and the wallpaper write kicked off its
-# crossfade. Now retint the running apps. Omarchy's run_parallel lesson:
-# kitty, hyprland and the global gsettings/foot/editor pass touch different
-# things, so run them TOGETHER instead of stacking their latencies (~110ms
-# + 16ms + 640ms serial -> one ~640ms wave). `wait` keeps quickshell's
-# one-switch-at-a-time queue honest: the next apply starts only after every
-# retint from this one has finished, so no two passes race on the same
-# configs.
+# crossfade. Now retint the running apps. The run_parallel lesson from
+# the original: kitty, hyprland and the global gsettings/foot/editor pass
+# touch different things, so run them TOGETHER instead of stacking their
+# latencies (~110ms + 16ms + 640ms serial -> one ~640ms wave). `wait`
+# keeps quickshell's one-switch-at-a-time queue honest: the next apply
+# starts only after every retint from this one has finished, so no two
+# passes race on the same configs.
 if command -v kitty >/dev/null 2>&1 && pgrep -x kitty >/dev/null 2>&1; then
     # -k 1: TERM at 3s, then KILL at 4s. Hard-fact: without a running kitty
     # this kitten can get SIGTTIN-stopped on the session's controlling tty,
@@ -129,7 +129,7 @@ if command -v cliamp >/dev/null 2>&1 \
     timeout -k 1 3 cliamp theme "$THEME" >/dev/null 2>&1 || true
 fi
 
-# global theming — omarchy-style: gsettings/GTK, foot (ini + live OSC),
+# global theming, all in one pass: gsettings/GTK, foot (ini + live OSC),
 # kitty, chromium policy. Everything user-session runs inline; the /etc
 # policy push degrades gracefully until one-time-root-setup.sh has run.
 # Hard `timeout 10`: a wedged D-Bus call or a foot tty whose buffer is

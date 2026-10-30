@@ -1,6 +1,6 @@
 // Adapter for the ported Nebula widgets (Nebula shell, GPL-3.0): answers
 // the member names the widget files bind on, backed by this shell's own
-// network service — no Nebula backend travels with us.
+// network service — no upstream backend travels with us.
 pragma Singleton
 
 import Quickshell
@@ -21,7 +21,7 @@ Singleton {
     // SSID / "Ethernet" / "Offline" already reads as a label to the veil
     readonly property string connectionLabel: Services.Network.name
 
-    // passthroughs for anything else that binds Nebula's names directly
+    // passthroughs for anything else that binds upstream's names directly
     readonly property bool connected: Services.Network.connected
     readonly property bool isWifi: Services.Network.isWifi
     readonly property string name: Services.Network.name

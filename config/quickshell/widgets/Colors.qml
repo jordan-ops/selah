@@ -5,7 +5,7 @@ import "../services" as Services
 
 // Palette bridge for the ported Nebula widgets (Nebula shell, GPL-3.0).
 //
-// The ported files speak Nebula's Material-3 role names — Colors.primary,
+// The ported files speak upstream's Material-3 role names — Colors.primary,
 // Colors.surfaceContainerHigh, Colors.tertiary… (~1,700 bindings). Instead of
 // rewriting every one, this singleton ANSWERS those names from our own live
 // palette (services/Colors.qml, which already tracks every theme switch):

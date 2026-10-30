@@ -58,7 +58,7 @@ Variants {
             target: barRoot
             function onBarVisibleChanged() {
                 if (!barRoot.barVisible) {
-                    pill.trayOpen = false   // chevron popup is its own surface
+                    pill.trayOpen = false   // in-window card: close it with the bar
                     let guard = 0
                     while (!Services.Polkit.open && toplevel.panelOpen && guard++ < 16)
                         toplevel.dismissPanels()
@@ -158,13 +158,28 @@ Variants {
             // zero-warning gate. The gate is therefore done by SIZING: a
             // zero-size region contributes no input, which is what keeps the
             // resting bar passing every click through to the windows below.
-            // (Same trick omarchy's shell/Ui/KeyboardPanel.qml uses for its
-            // full-screen dismissal region.)
+            // (The original's shell/Ui/KeyboardPanel.qml uses the same
+            // trick for its full-screen dismissal region.)
             Region {
                 x: 0
                 y: 0
                 width: toplevel.panelOpen ? toplevel.width : 0
                 height: toplevel.panelOpen ? toplevel.height : 0
+            }
+            // The tray card renders INSIDE this surface (PopupWindow is a
+            // ProxyPopupWindow — its pixels composite into the bar's own
+            // surface, hyprctl layers shows no popup surface at all), so
+            // without its own region here the mask let every click on the
+            // card fall through to the window behind the bar. That — not
+            // the click logic — is why single/double clicks on the tray
+            // rows did NOTHING: the pixels showed, the input never
+            // arrived. Same size-gating as the catch above: zero-sized
+            // while closed, so a hidden card is never a dead click zone.
+            Region {
+                x: pill.trayOpen ? trayPopup.x : 0
+                y: pill.trayOpen ? trayPopup.y : 0
+                width: pill.trayOpen ? trayCard.width : 0
+                height: pill.trayOpen ? trayCard.height : 0
             }
         }
 
@@ -290,6 +305,14 @@ Variants {
             property real osdValue: 0
             property int osdPriority: 0
 
+            // OSD scrub state — while the level slider is held the
+            // handle rides the pointer's own value (osdScrubV) instead
+            // of the service echo, so hardware quantisation can't yank
+            // it mid-drag; the settle timer hands it back to the real
+            // level once the write has landed.
+            property bool osdScrub: false
+            property real osdScrubV: 0
+
             // charger flap state — see chargeFlip()/chargeAnnounce() below
             property var chargeStamps: []
             property bool chargeState: false
@@ -370,6 +393,41 @@ Variants {
                 // retires it on its own like any other hover.
                 trayOpen = true
                 trayIdle.restart()
+            }
+
+            // Kill a tray app's process: "search the process id and pkill
+            // it". Scans /proc/*/exe for a basename that NORMALIZES to the
+            // app's SNI id — lowercased, punctuation stripped — so
+            // TelegramDesktop ≡ telegram-desktop and qBittorrent ≡
+            // qbittorrent (an exact pkill -x can never bridge that). The id
+            // is handed to a STATIC script as "$1" (sanitized to [a-z0-9],
+            // length ≥ 3) rather than interpolated, so this can't become a
+            // shell-injection surface; the script skips itself and its
+            // parent, so no id can ever take qs down. SIGTERM, not SIGKILL:
+            // "please exit". Every caller — the double-click and the tray
+            // IPC's quit() — runs exactly this, so there is one kill path
+            // to reason about.
+            function pkillTrayApp(id) {
+                const n = String(id ?? "").trim()
+                    .toLowerCase().replace(/[^a-z0-9]/g, "")
+                if (n.length < 3) return false
+                trayKillProc.command = ["sh", "-c",
+                    'n="$1"; for p in /proc/[0-9]*; do ' +
+                    'pid=${p##*/}; ' +
+                    '[ "$pid" = "$$" ] && continue; ' +
+                    '[ "$pid" = "$PPID" ] && continue; ' +
+                    'e=$(readlink "$p/exe" 2>/dev/null) || continue; ' +
+                    'm=$(printf %s "${e##*/}" | tr "A-Z" "a-z" | tr -cd "a-z0-9"); ' +
+                    '[ "$m" = "$n" ] && kill -TERM "$pid" 2>/dev/null; ' +
+                    'done',
+                    "tray-quit", n]
+                // `running = true`, NOT start(): QuickShell's Process has
+                // no start() method — calling one threw "Property 'start'
+                // ... is not a function", which is why the old ✕ clicked
+                // through and closed NOTHING.
+                trayKillProc.running = true
+                console.log("[tray] pkill", n)
+                return true
             }
 
             MouseArea {
@@ -543,10 +601,14 @@ Variants {
                 clock:        () => Qt.size(620, 520),
                 // the transient slot is shared by four flashes — a level
                 // glance and a plug event keep the compact bar, a track
-                // swap grows the pill for art + two lines
+                // swap grows the pill for art + two lines; volume and
+                // brightness get the taller pill for the scrubbable
+                // frost slider (30px control + 7px breathing room)
                 osd:          () => pill.osdType === "track"
                                     ? Qt.size(430, 56)
-                                    : Qt.size(220, 35),
+                                    : pill.osdType === "charge"
+                                    ? Qt.size(220, 35)
+                                    : Qt.size(240, 44),
                 notif:        () => Qt.size(420, Math.max(35, notificationContent.implicitHeight + 22)),
                 power:        () => Qt.size(pill.powerRowWidth(), 24 + 64),
                 clipboard:    () => Qt.size(430, 12 + 30 + 8 + clipboardContent.listH + 12),
@@ -596,6 +658,39 @@ Variants {
                 id: osdTimer
                 interval: 1800
                 onTriggered: pill.osdVisible = false
+            }
+
+            // write the level the OSD slider reports + re-arm the hold.
+            // Volume goes straight to pipewire; brightness converts the
+            // slider's 0..100 into the 0..1 setLevel speaks. Raising a
+            // muted sink clears the mute first — the standard
+            // grab-the-slider behaviour, so the scrub is audible.
+            function osdApply(v) {
+                if (pill.osdType === "volume") {
+                    if (v > 0 && Services.Volume.muted) Services.Volume.toggleMute()
+                    Services.Volume.setVolume(v / 100)
+                } else if (pill.osdType === "brightness") {
+                    Services.Brightness.setLevel(v / 100)
+                }
+                // equal-priority refresh: keeps the OSD alive under the
+                // pointer even when a service echo is still in flight
+                // (brightnessctl runs through one shared Process) and
+                // re-syncs osdValue to what was just requested
+                pill.showOsd(pill.osdType, v / 100)
+            }
+
+            Timer {
+                id: osdScrubSettle
+                interval: 220
+                // brightnessctl writes ride a single shared Process — a
+                // commit that races an in-flight set gets dropped, so
+                // re-apply the final value once the process is certainly
+                // free, then hand the handle back to the service echo
+                // (the real, quantised level).
+                onTriggered: {
+                    if (pill.osdScrub) pill.osdApply(pill.osdScrubV)
+                    pill.osdScrub = false
+                }
             }
 
             // ——— charger state, with flap handling ———
@@ -1183,25 +1278,66 @@ Variants {
                     }
                 }
 
-                Rectangle {
+                // scrubbable level control — the same frost slider the
+                // settings rows and widget studio use (M3 track/handle).
+                // showValueLabel is off: the floating bubble would clip
+                // on the panel window's top edge (floatGap is 8, the
+                // bubble needs ~32 above the handle) — the readout on
+                // the right carries the number instead, always-on
+                // instead of press-only.
+                SettingsFrostSlider {
+                    id: osdSlider
                     width: 140
-                    height: 4
-                    radius: 2
-                    color: Services.Colors.surface
-                    anchors.verticalCenter: parent.verticalCenter
+                    height: 30
+                    from: 0
+                    to: 100
+                    step: 1
+                    suffix: "%"
+                    showValueLabel: false
+                    // held = the pointer owns the value; at rest the
+                    // real level (clamped: pipewire sinks can be
+                    // amplified past 1.0)
+                    value: pill.osdScrub ? pill.osdScrubV
+                        : Math.min(100, pill.osdValue * 100)
 
-                    Rectangle {
-                        width: parent.width * pill.osdValue
-                        height: parent.height
-                        radius: 2
-                        color: Services.Colors.accent
-
-                        // fill follows the level — the bounce spring makes
-                        // each volume step land with a small overshoot
-                        Behavior on width {
-                            SpringAnimation { spring: Services.Motion.bounceSpring; damping: Services.Motion.bounceDamping }
+                    onMoved: v => {
+                        pill.osdScrubSettle.stop()
+                        pill.osdScrub = true
+                        pill.osdScrubV = v
+                        pill.osdApply(v)
+                    }
+                    onCommitted: v => {
+                        pill.osdScrubV = v
+                        pill.osdApply(v)
+                        pill.osdScrubSettle.restart()
+                    }
+                    // a press-and-hold without motion must not let
+                    // osdTimer drop the OSD out from under the pointer
+                    onPressedChanged: {
+                        if (osdSlider.pressed) osdTimer.stop()
+                        else if (!osdHover.hovered) osdTimer.restart()
+                    }
+                    // hovering the OSD holds it open too — travelling
+                    // from the volume key to the slider shouldn't race
+                    // the 1.8s hide; leaving (unpressed) arms it again
+                    HoverHandler {
+                        id: osdHover
+                        onHoveredChanged: {
+                            if (osdHover.hovered) osdTimer.stop()
+                            else if (!osdSlider.pressed) osdTimer.restart()
                         }
                     }
+                    Accessible.name: pill.osdType === "volume" ? "Volume" : "Brightness"
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.family: Services.Fonts.family
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: Services.Colors.text
+                    text: Math.round(pill.osdScrub ? pill.osdScrubV
+                        : Math.min(100, pill.osdValue * 100)) + "%"
                 }
             }
 
@@ -1609,7 +1745,11 @@ Variants {
                     // "indicator slides", and springs retarget with velocity:
                     // holding an arrow key pours continuously instead of
                     // restarting per row (this is the "colour pours from one
-                    // selected to the other" behaviour).
+                    // selected to the other" behaviour). accentSurface keeps
+                    // the block on-theme but floors the label-on-pill
+                    // contrast — kanagawa derives primary == on_background,
+                    // which used to paint the app names in the pill's own
+                    // colour.
                     Rectangle {
                         id: selPill
                         parent: resultsList.contentItem
@@ -1620,7 +1760,7 @@ Variants {
                         height: 44
                         radius: 8
                         visible: resultsList.currentItem != null
-                        color: Services.Colors.accent
+                        color: Services.Colors.accentSurface
 
                         Behavior on y {
                             SpringAnimation {
@@ -1749,7 +1889,7 @@ Variants {
                                 width: yesLabel.implicitWidth + 32
                                 height: 30
                                 radius: 8
-                                color: Services.Launcher.confirmChoice === 0 ? Services.Colors.accent : "transparent"
+                                color: Services.Launcher.confirmChoice === 0 ? Services.Colors.accentSurface : "transparent"
                                 border.width: Services.Launcher.confirmChoice === 0 ? 0 : 1
                                 border.color: Services.Colors.accent
 
@@ -1778,7 +1918,7 @@ Variants {
                                 width: noLabel.implicitWidth + 32
                                 height: 30
                                 radius: 8
-                                color: Services.Launcher.confirmChoice === 1 ? Services.Colors.accent : "transparent"
+                                color: Services.Launcher.confirmChoice === 1 ? Services.Colors.accentSurface : "transparent"
                                 border.width: Services.Launcher.confirmChoice === 1 ? 0 : 1
                                 border.color: Services.Colors.accent
 
@@ -2571,7 +2711,7 @@ Variants {
                     }
                 }
 
-                // wrong-password shake (omarchy's shakeOffset pattern) —
+                // wrong-password shake (the original's shakeOffset pattern) —
                 // targets the column, since the anchored content root can't
                 // slide on x
                 SequentialAnimation {
@@ -2768,7 +2908,7 @@ Variants {
 
         // same trick for the tray popup — the whole feature is hover-driven,
         // so this is the only way to exercise it without a pointer:
-        //   qs ipc call tray open / close / isOpen / count / ids
+        //   qs ipc call tray open / close / isOpen / count / ids / quit <id>
         IpcHandler {
             target: "tray"
             function open(): void { pill.trayTouch() }
@@ -2782,59 +2922,78 @@ Variants {
             function ids(): string {
                 return JSON.stringify(SystemTray.items.values.map(it => it.id))
             }
+            // kill a tray app's process by id — the SAME path right-click
+            // uses, exposed so it can be exercised without a pointer:
+            // qs ipc call tray quit qBittorrent
+            function quit(id: string): void {
+                console.log("[tray] ipc quit:", id)
+                pill.pkillTrayApp(id)
+            }
         }
 
-        // ---------------- tray popup (Meet-style bounce) ----------------
+        // ---------------- tray popup (bar-side dropdown) ----------------
         // The tray icons moved out of the pill and into this drop-down,
-        // because that is what a down-chevron promises. Modeled on Google
-        // Meet's reaction bar: hover the chevron and the panel springs in
-        // with a bounce, the icons cascade in behind it, and the whole thing
-        // retires on its own if you stop hovering (pill.trayIdle).
+        // because that is what a down-chevron promises. It stays a VERTICAL
+        // list — but each row is now JUST the app's icon, behaving like the
+        // tray icon it replaces: LEFT click opens the app, RIGHT click
+        // closes its background process, middle = secondary activate. The
+        // ✕/⌄ buttons are gone — they never received the click reliably,
+        // and icon semantics are what a tray is supposed to have anyway.
+        // The list still needs the room a horizontal lozenge never had, and
+        // it opens directly BELOW THE CHEVRON, next to the bar, the way the
+        // updates chip's card sits with its chip. It is not docked
+        // to the screen's edge: the panel belongs to the control that
+        // summons it, so the eye never has to jump from the chevron to the
+        // far corner to find it.
         //
-        // The bar is the TOP layer, so Meet's upward pop is mirrored here —
-        // this drops DOWN out of the pill, and the chevron flips to point
-        // back up at it while open.
-        PopupWindow {
+        // Motion is unchanged from the Meet-style version — the card still
+        // springs out of its top edge and the rows cascade in on Motion's
+        // stagger — so it transforms in the same visual language as the
+        // bar's other surfaces. trayIdle still retires it on its own, and
+        // the chevron still flips to point back up at it while open.
+        // In-window card. This USED to be a PopupWindow — QuickShell's
+        // PopupWindow is a ProxyPopupWindow: its pixels composite into the
+        // PARENT window's surface (hyprctl layers confirms: no popup
+        // surface ever appears, only the bar's own 1920x560 surface),
+        // which made it subject to the bar's input mask — a mask that
+        // covered only the pill + chips, so every click on the card fell
+        // through to the window behind the bar (see the tray Region in
+        // the mask). As a plain Item with its own mask region it receives
+        // input through the exact same path as the pill itself, and the
+        // whole surface-lifecycle layer (map pulse, stale-open recovery)
+        // becomes unnecessary — there is no surface to go stale.
+        Item {
             id: trayPopup
-            anchor.window: toplevel
-            // Centred on the chevron. trayChip sits at the pill's right edge
-            // and the pill is horizontally centred, so its centre in toplevel
-            // coords is (W + pillW)/2 - rightMargin - chipW/2 — the same
-            // arithmetic the drop-downs did. Clamped both ways because a
-            // long tray row centred that far right would run off the screen.
-            // mapFromItem() is avoided on purpose: the Quickshell docs say it
-            // does NOT update reactively.
-            anchor.rect.x: Math.max(12, Math.min(
+            // Centred on the chevron and read from pill.x LIVE rather than
+            // re-deriving the pill's position as (W + pillW)/2: pill.x is
+            // Qt's own computed position, correct even mid-morph, while the
+            // hand-derived form assumes the rest width (the same trap the
+            // control-center advanced panel hit — see its note below).
+            // Clamped to the screen anyway: centred on a chip near the
+            // pill's right edge, even this narrow card could clip off the
+            // side of a small monitor. mapFromItem() is avoided on purpose: the
+            // Quickshell docs say it does NOT update reactively.
+            x: Math.max(12, Math.min(
                 toplevel.width - trayCard.width - 12,
-                (toplevel.width + pill.width) / 2 - 12 - trayChip.width / 2
+                pill.x + pill.width - 12 - trayChip.width / 2
                     - trayCard.width / 2))
-            anchor.rect.y: pill.height + 4
-            // Sized to the card EXACTLY. PopupWindow has no `mask` property
-            // (checked the v0.3.1 type docs — only parentWindow, visible,
-            // grabFocus, anchor, relativeX/Y, screen), so every pixel of this
-            // surface is a click target: any transparent padding would be a
-            // dead zone that swallows clicks aimed at the desktop.
-            implicitWidth: trayCard.width
-            implicitHeight: trayCard.height
-            color: "transparent"
+            y: pill.height + 4
+            width: trayCard.width
+            height: trayCard.height
 
-            // same animate-then-hide window pattern the drop-down popups
-            // used: show instantly on open, let the card spring, and wait
-            // out the exit before the surface goes away
-            property bool windowVisible: false
-            visible: windowVisible
+            // Show instantly on open — the card's own spring/opacity
+            // Behaviors do the visible part. Stays alive 270ms past close
+            // so the exit animation can play out before the item (and its
+            // mask region) is gone.
+            property bool popShown: false
+            visible: popShown
 
             Connections {
                 target: pill
                 function onTrayOpenChanged() {
                     if (pill.trayOpen) {
                         trayClose.stop()
-                        // pulse visible off→on for a FRESH map every open:
-                        // guards the stale-open state where Hyprland
-                        // suppressed the popup under a fullscreen client, QML
-                        // thought it was shown, and it never recovered.
-                        trayPopup.windowVisible = false
-                        trayMapPulse.restart()
+                        trayPopup.popShown = true
                     } else {
                         trayClose.restart()
                     }
@@ -2842,26 +3001,25 @@ Variants {
             }
 
             Timer {
-                id: trayMapPulse
-                interval: 30
-                onTriggered: trayPopup.windowVisible = true
-            }
-
-            Timer {
                 id: trayClose
                 interval: 270
-                onTriggered: if (!pill.trayOpen) trayPopup.windowVisible = false
+                onTriggered: if (!pill.trayOpen) trayPopup.popShown = false
             }
 
             Rectangle {
                 id: trayCard
-                // Width has to consider BOTH states: with no tray applet the
-                // icon Row collapses to 0 and this would be a bare 18px
-                // lozenge, so it takes whichever of the row or the
-                // "No tray apps" hint is wider. (+18 = the card's padding.)
-                width: Math.max(trayRow.implicitWidth, trayEmptyHint.implicitWidth) + 18
-                height: 44
-                radius: 22
+                // Fixed 96px column — icon-only rows now: a vertical list
+                // takes its height from the row count, not its width from
+                // the contents (the TrayMenuList lesson: a Column sizing
+                // itself off rows that stretch to the Column's width closes
+                // a sizing loop that never settles). Narrow because a row
+                // is JUST its icon — it carries the icon's own semantics
+                // (click opens, double-click closes) instead of buttons.
+                // Empty state keeps the old lozenge height.
+                width: 96
+                height: pill.trayItems.length > 0
+                    ? trayColumn.implicitHeight + 16 : 44
+                radius: 18
                 color: Services.Colors.surface
                 border.width: 1
                 border.color: Services.Colors.low
@@ -2880,6 +3038,13 @@ Variants {
                     text: "No tray apps"
                     font.pixelSize: 11
                     color: Services.Colors.textMuted
+                }
+
+                // One shared killer for every row's close fallback (see
+                // trayIconItem.quitViaPid) — a Process per delegate would
+                // just be N idle objects doing the same job.
+                Process {
+                    id: trayKillProc
                 }
 
                 // The bounce. Grows out of its own top edge — the edge that
@@ -2914,10 +3079,12 @@ Variants {
                     onHoveredChanged: if (hovered) pill.trayTouch()
                 }
 
-                Row {
-                    id: trayRow
-                    anchors.centerIn: parent
-                    // mutually exclusive with trayEmptyHint — both are
+                Column {
+                    id: trayColumn
+                    anchors.top: parent.top
+                    anchors.topMargin: 8
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    // mutually exclusive with trayEmptyHint — the hint is
                     // centre-anchored, so if both showed they'd overlap.
                     // Both sides count pill.trayItems (raw list minus the
                     // tray.hidden ids), never the raw registry.
@@ -2932,18 +3099,28 @@ Variants {
                             required property int index
                             required property var modelData
 
-                            // 32px plate, not the 18px icon: the tray row is
-                            // now a touch target the pointer has to travel to,
-                            // so it gets Meet's generous circular hit area.
-                            width: 32
-                            height: 32
+                            // An icon-only row that IS the control: the
+                            // app's icon centered in a disc, with the tray
+                            // icon's own semantics — left click opens,
+                            // right click closes the background process.
+                            // No buttons: the ✕/⌄ never received the click
+                            // reliably, and no buttons means no sibling
+                            // MouseArea can stack over the row's own click
+                            // area — there is exactly ONE input item per
+                            // row now.
+
+                            width: trayCard.width - 18
+                            height: 40
 
                             // Meet's per-emoji hover disc
                             Rectangle {
                                 anchors.fill: parent
-                                radius: width / 2
-                                color: trayIconArea.containsMouse
-                                    ? Services.Colors.surfaceAlt : "transparent"
+                                radius: 12
+                                color: quitFlash.running
+                                    ? Services.Colors.critical
+                                    : (trayIconArea.containsMouse
+                                        ? Services.Colors.surfaceAlt
+                                        : "transparent")
                                 // ColorAnimation, not NumberAnimation: the
                                 // rest value here is "transparent", and
                                 // NumberAnimation coerced it to #000000 —
@@ -2961,9 +3138,17 @@ Variants {
 
                             IconImage {
                                 anchors.centerIn: parent
-                                width: 18
-                                height: 18
+                                width: 20
+                                height: 20
                                 source: modelData.icon
+                            }
+
+                            // "I couldn't close it" — a 400ms red flash on
+                            // the ROW beats an input target that silently
+                            // does nothing (all three quit tiers missing).
+                            Timer {
+                                id: quitFlash
+                                interval: 400
                             }
 
                             // Cascade: each icon pops in on Motion's stagger
@@ -3014,11 +3199,24 @@ Variants {
                                 }
                             }
 
-                            // left = activate, middle = secondary activate,
-                            // right = the app's own menu (DBusMenu →
-                            // QsMenuAnchor). Activating closes the popup;
-                            // opening a menu deliberately does not, since the
-                            // menu is anchored to the icon inside it.
+                            // The whole row behaves like the tray icon it
+                            // represents — and like every tray item in the
+                            // reference shells: ONE input item, immediate
+                            // onClicked, no timing games. LEFT click opens
+                            // the app right away; RIGHT click closes its
+                            // background process via the pid-search +
+                            // SIGTERM chain (quitApp → pkillTrayApp);
+                            // middle = secondary activate. Close-on-right-
+                            // click (not double click) is the corrected
+                            // spec: double-click detection needed a delayed
+                            // open plus a timing window, and none of it
+                            // ever got the chance to run anyway — the
+                            // clicks weren't being delivered at all until
+                            // the card got its own mask region (see the
+                            // tray Region in toplevel's mask). With close
+                            // out of the left-click path the open is
+                            // immediate again, the way a tray icon behaves
+                            // everywhere else.
                             MouseArea {
                                 id: trayIconArea
                                 anchors.fill: parent
@@ -3026,26 +3224,76 @@ Variants {
                                 cursorShape: Qt.PointingHandCursor
                                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                                 onContainsMouseChanged: if (containsMouse) pill.trayTouch()
+
                                 onClicked: (mouse) => {
                                     if (mouse.button === Qt.RightButton) {
-                                        if (modelData.hasMenu && modelData.menu && modelData.menu.menu) {
-                                            trayMenuAnchor.anchor.item = trayIconItem
-                                            trayMenuAnchor.menu = modelData.menu.menu
-                                            trayMenuAnchor.open()
+                                        console.log("[tray] close (right click):",
+                                            modelData.id)
+                                        if (trayIconItem.quitApp()) {
+                                            // Stay open while other tray apps
+                                            // remain, so closing several is
+                                            // one right-click each with no
+                                            // reopening between them; the row
+                                            // vanishes on its own when the
+                                            // SNI item unregisters.
+                                            if (pill.trayItems.length <= 1)
+                                                pill.trayOpen = false
+                                        } else {
+                                            quitFlash.restart()
                                         }
-                                    } else if (mouse.button === Qt.MiddleButton) {
+                                        return
+                                    }
+                                    if (mouse.button === Qt.MiddleButton) {
+                                        console.log("[tray] secondary activate:",
+                                            modelData.id)
                                         modelData.secondaryActivate()
                                         pill.trayOpen = false
-                                    } else {
-                                        modelData.activate()
-                                        pill.trayOpen = false
+                                        return
                                     }
+                                    console.log("[tray] open (left click):",
+                                        modelData.id)
+                                    modelData.activate()
+                                    pill.trayOpen = false
                                 }
                             }
 
-                            QsMenuAnchor {
-                                id: trayMenuAnchor
-                                // anchor.item + menu are set per-click above
+                            // Close path 1: the PID the SNI id embeds, per
+                            // the org.kde.StatusNotifierItem-<pid>-<screen>
+                            // convention. SIGTERM — apps read it as "please
+                            // exit", not a hard kill.
+                            function quitViaPid() {
+                                const m = /-([0-9]+)-[0-9]+$/.exec(String(modelData.id))
+                                if (!m) return false
+                                trayKillProc.command = ["kill", m[1]]
+                                // `running = true`, NOT start(): QuickShell's
+                                // Process has no start() method — calling one
+                                // threw "Property 'start' ... is not a
+                                // function", which is why the old ✕ clicked
+                                // through and closed NOTHING.
+                                trayKillProc.running = true
+                                return true
+                            }
+
+                            // Close path 2 (the workhorse): find the process
+                            // id and pkill it — pill.pkillTrayApp scans
+                            // /proc/*/exe for a basename that normalizes to
+                            // this SNI id and SIGTERMs every match. The
+                            // menu-tier detour is GONE by request: it added
+                            // an async D-Bus fetch and a false-success mode
+                            // (a "Close" entry that only closes a window)
+                            // for nothing — this is the direct path.
+                            function quitApp() {
+                                const via = quitViaPid() ? "pid-in-id"
+                                    : pill.pkillTrayApp(modelData.id) ? "pkill"
+                                    : "FAILED"
+                                // Logged so a "didn't close" report is
+                                // diagnosable from qs.log without guessing:
+                                // which path ran. "pkill" means the /proc
+                                // matcher script was LAUNCHED (its result is
+                                // async).
+                                console.log("[tray] quit", modelData.id,
+                                    "->", via)
+                                return via !== "FAILED"
                             }
                         }
                     }
@@ -3271,14 +3519,43 @@ Variants {
         // morph: this is document-scale UI with a sidebar, and the launcher
         // deep-links into it (SettingsApp.page/focusId). toplevel only ever
         // grows with the pill (max 560), so vertical centering anchors to
-        // the screen; the sizer springs make it open and close in place.
+        // the screen. Entrance is a SLIDE: the card drops in from just off
+        // the top edge and settles centred, and climbs back out on close
+        // (M3's "enter/exit the screen" pair) — it no longer grows from a
+        // point in the middle of the screen.
         PopupWindow {
             id: settingsPopup
             anchor.window: toplevel
             anchor.rect.x: (toplevel.width - settingsSizer.width) / 2
-            anchor.rect.y: ((toplevel.screen ? toplevel.screen.height : 900) - settingsSizer.height) / 2
-            implicitWidth: 1000
-            implicitHeight: 640
+            // Slide state: 0 = parked just above the top edge (fully
+            // off-screen, so nothing pops into existence), 1 = the centred
+            // resting place. The SURFACE itself moves — this popup is sized
+            // to the card exactly, so an offset applied to the content
+            // inside it would only clip the card against its own edge (the
+            // note trayPopup carries). Live anchor moves are already proven
+            // here: the corner-grip resize re-centers through these same
+            // two properties.
+            readonly property real restY: ((toplevel.screen ? toplevel.screen.height : 900)
+                                           - settingsSizer.height) / 2
+            readonly property real topY: -settingsSizer.height
+            property real slide: 0   // 0 parked off-screen · 1 resting centred
+            anchor.rect.y: topY + (restY - topY) * slide
+
+            // M3 "enter/exit the screen": emphasized decelerate the whole way
+            // in, emphasized accelerate back out. One shared animation driven
+            // imperatively (to/duration/easing picked at each flip in the
+            // Connections below) — start-up timing checks showed a
+            // `Behavior on slide` picking its duration token up around the
+            // same `open` flip it was animating, which ran the entrance at
+            // the exit's 200ms once.
+            NumberAnimation {
+                id: slideAnim
+                target: settingsPopup
+                property: "slide"
+                easing.type: Easing.BezierSpline
+            }
+            implicitWidth: Services.SettingsApp.winW
+            implicitHeight: Services.SettingsApp.winH
             color: "transparent"
 
             property bool windowVisible: false
@@ -3287,18 +3564,30 @@ Variants {
             Connections {
                 target: Services.SettingsApp
                 function onOpenChanged() {
+                    slideAnim.stop()
                     if (toplevel.ownsOverlay(Services.SettingsApp)) {
+                        // every knob set BEFORE start() — the running
+                        // animation must never read a half-updated token
+                        slideAnim.duration = Services.Motion.emphasizedEnter
+                        slideAnim.easing.bezierCurve = Services.Motion.emphasizedDecelerate
+                        slideAnim.to = 1
                         settingsClose.stop()
                         settingsPopup.windowVisible = true
                     } else {
+                        slideAnim.duration = Services.Motion.emphasizedExit
+                        slideAnim.easing.bezierCurve = Services.Motion.emphasizedAccelerate
+                        slideAnim.to = 0
                         settingsClose.restart()
                     }
+                    slideAnim.start()
                 }
             }
 
             Timer {
                 id: settingsClose
-                interval: 270
+                // hold the surface open for the whole exit slide — any
+                // shorter and the card is cut off mid-climb
+                interval: Services.Motion.emphasizedExit + 60
                 onTriggered: {
                     if (!Services.SettingsApp.open)
                         settingsPopup.windowVisible = false
@@ -3323,15 +3612,21 @@ Variants {
                 anchors.centerIn: parent
                 clip: true
 
-                width:  Services.SettingsApp.open ? 1000 : 0
-                height: Services.SettingsApp.open ? 640 : 0
+                // macOS-style resizable window — the popup surface takes
+                // the size live, the sizer (and with it the content)
+                // springs to it, so a corner-grip drag re-centers smoothly.
+                // Deliberately NOT gated on `open` any more: collapsing to 0
+                // here WAS the old pop-in, and the slide above is the whole
+                // entrance (and exit) now. The springs stay for the grip.
+                width:  Services.SettingsApp.winW
+                height: Services.SettingsApp.winH
 
                 Behavior on width { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
                 Behavior on height { SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping } }
 
                 SettingsWindow {
                     id: settingsWin
-                    anchors.centerIn: parent
+                    anchors.fill: parent
                 }
             }
 
@@ -3345,3 +3640,4 @@ Variants {
         }
     }
 }
+
