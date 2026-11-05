@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Material clock card — the `timecard` row type. Live ticking clock +
 // long date, an NTP tile (on / synced state from timedatectl) with a

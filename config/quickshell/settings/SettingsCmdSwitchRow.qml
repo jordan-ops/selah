@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Stateful toggle backed by read+toggle shell commands — the `cmdswitch`
 // row type, for booleans that live outside hyprctl (nmcli radio,

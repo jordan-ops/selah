@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // About page — Power-section-style cards instead of flat info rows.
 //   · fastfetch details grouped by domain (System / Hardware / Display /

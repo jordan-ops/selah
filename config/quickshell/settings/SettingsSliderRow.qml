@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Right-aligned slider for one Hyprland numeric option — the renderer's
 // `slider` row type. The control itself is SettingsFrostSlider (the

@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // The wallpaper grid shared by all three views: theme groups, the standalone
 // local library, and wallhaven results. It reads Aether.viewModel and knows

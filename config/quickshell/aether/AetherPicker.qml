@@ -35,7 +35,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 Variants {
     model: Quickshell.screens

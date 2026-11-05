@@ -9,6 +9,7 @@ import Quickshell.Services.Notifications
 import Quickshell.Io
 import "./modules"
 import "./services" as Services
+import "./settings"   // SettingsWindow + SettingsFrostSlider live in settings/
 // import "./services/Colors"
 Variants {
     id: barRoot

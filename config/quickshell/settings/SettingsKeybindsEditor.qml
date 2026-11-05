@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Keybinding editor — the `keybinds` row type (a card): reads
 // ~/.config/hypr/binds.lua, lists every top-level hl.bind statement

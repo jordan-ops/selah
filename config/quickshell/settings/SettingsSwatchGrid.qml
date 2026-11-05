@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Swatch grid — the new `swatches` (themes) and `wallpapers` row types.
 // Embedded directly in the Appearance page instead of the old actions

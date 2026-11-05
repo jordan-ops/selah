@@ -1,9 +1,0 @@
-import QtQuick
-import "../services"
-
-Text{
-    color:Colors.text
-    font.pixelSize: 14
-    font.bold: Theme.fontBold
-    text:(Network.isWifi ?  "󰤨  " : "󰤭  ") + " "
-}

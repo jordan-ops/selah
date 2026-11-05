@@ -1,6 +1,6 @@
 import QtQuick
-import "widgets"
-import "./services" as Services
+import "../widgets"
+import "../services" as Services
 
 // Settings-facing adapter over widgets/M3Slider.qml — the "frost
 // slider" the widget studio uses (thick rounded track, pill handle,

@@ -1,5 +1,6 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
+import "../settings"   // SettingsSliderRow
 
 // One colour-edit row for AetherPalettePanel — aether's AdjustmentSlider in
 // this setup's visual language (same track/handle geometry as

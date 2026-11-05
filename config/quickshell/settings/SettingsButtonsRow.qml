@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Horizontal button group — the `buttons` row type: every multi-choice
 // setting drawn as one row of material-style chips (wraps when the set

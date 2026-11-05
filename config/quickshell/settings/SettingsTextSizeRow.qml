@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Text-size row — the renderer's `textsize` row type: the control is
 // SettingsFrostSlider (the widget studio's M3Slider behind a

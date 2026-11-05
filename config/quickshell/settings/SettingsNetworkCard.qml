@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Material network card — the `netcard` row type. Same card language as
 // the battery: header with SSID + state pill, two info tiles (IP,

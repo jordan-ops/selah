@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // The window's switch, but backed by a live Hyprland option instead of a
 // stored pref — the `hyprswitch` row type. State is read from

@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // The controls column — aether's SettingsSidebar (Palette mode / Generate /
 // Adjust) squeezed into a width an overlay can spare.

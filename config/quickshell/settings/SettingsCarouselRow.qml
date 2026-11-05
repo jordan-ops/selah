@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls   // ToolTip attached property on the name + hero
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Carousel control — the `carousel` row type. The macOS Wallpaper-pane
 // layout: ONE large click-to-apply preview of the current selection

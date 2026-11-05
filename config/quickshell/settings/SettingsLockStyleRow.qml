@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
-import "./services" as Services
-import "./lock" as Lock
+import "../services" as Services
+import "../lock" as Lock
 
 // `lockstyle` row — the hero of Settings ▸ Lock screen.
 //

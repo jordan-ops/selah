@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Expanding dropdown — the new `dropdown` row type, for lists too long
 // for chips (layouts, fonts). The trigger sits where the chips would;

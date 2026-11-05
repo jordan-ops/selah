@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Compose sequences — the `xcompose` row type (a card): reads
 // ~/.XCompose (creating it with the standard `include "%L"` fallback on

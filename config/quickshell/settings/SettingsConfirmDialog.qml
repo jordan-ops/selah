@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // Destructive-action confirmation — a modal card over the settings
 // window (SettingsWindow instantiates one, anchored center of the

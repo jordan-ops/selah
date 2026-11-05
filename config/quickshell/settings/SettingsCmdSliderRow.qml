@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Command-backed frost slider — the renderer's `cmdslider` row type
 // (output / input volume). The old knob dial's exact data plumbing in

@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import QtQuick.Controls   // ToolTip attached property only — no Controls instances
-import "./services" as Services
+import "../services" as Services
 
 // The settings app window's content: sidebar pages + rows rendered by
 // type. It draws and routes only — every value it shows or writes lives

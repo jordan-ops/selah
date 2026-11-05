@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
-import "./services" as Services
+import "../services" as Services
 
 // Voice assistant card — the `voicecard` row type, Audio page. Voice is
 // an OPT-IN feature: the shell ships with voice.enabled false in the

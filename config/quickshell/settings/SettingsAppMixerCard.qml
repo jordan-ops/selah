@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
-import "./services" as Services
+import "../services" as Services
 
 // Per-app output routing — the `appmixer` row type, Audio page. Every
 // playing stream (pactl sink-inputs) becomes a row: the app's icon and

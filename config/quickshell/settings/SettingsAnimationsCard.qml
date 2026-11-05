@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Motion controls — the `animcard` row type (Animations page): three
 // independent groups so each motion domain can be tuned alone, plus a

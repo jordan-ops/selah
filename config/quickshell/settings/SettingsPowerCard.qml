@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./services" as Services
+import "../services" as Services
 
 // Material battery card — the `powercard` row type. One elevated card
 // instead of four info rows: big charge %, state chip, a rolling charge

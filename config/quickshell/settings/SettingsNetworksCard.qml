@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Networking
-import "./services" as Services
+import "../services" as Services
 
 // The `netlist` row type — the Networks list on the Network page.
 // Same card language as SettingsNetworkCard (netcard): a labelled card

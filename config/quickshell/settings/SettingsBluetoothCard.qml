@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // The `btlist` row type — the Devices list on the Bluetooth page.
 // Mirrors omasettings' BluetoothSection: three groups (connected /
