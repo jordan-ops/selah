@@ -1,0 +1,30 @@
+# Sakura theme palette: Resembling sakura (cherry blossom) shades.
+# These tokens will be consumed by Palette.qml via a future tokenizer.
+# Non-release commit (design-phase-1 skeleton).
+
+[colors]
+# Light mode (default)
+accent = "#C5A3D8"           # Sakura soft purple
+selected = "#E6D4E9"
+text = "#2D1B2E"
+textMuted = "#6B4E65"
+surface = "#FFFBFF"
+surfaceVariant = "#F3E9F5"
+low = "#E8D9EC"
+high = "#D1B0C9"
+border = "#D4B8C6"
+bg = "#FAF8FA"
+
+# Dark mode
+darkAccent = "#E6D4E9"
+darkSelected = "#D6B0D9"
+darkText = "#F8F3F6"
+darkTextMuted = "#C6A6BC"
+darkSurface = "#1A0F14"
+darkSurfaceVariant = "#2D1E26"
+darkLow = "#382530"
+darkHigh = "#28181F"
+darkBorder = "#2E1F26"
+
+[theme]
+mode = "light"
