@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Networking
-import "./services" as Services
+import "../services" as Services
 
 // The "advanced" half of the hybrid picker approach: full device lists with
 // real actions (pair, trust, forget), given actual room to breathe instead

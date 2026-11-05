@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import "aether"
+import "bar"
 import "widgets"
 import "services" as Services
 

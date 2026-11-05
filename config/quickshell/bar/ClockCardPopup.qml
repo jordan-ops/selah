@@ -1,5 +1,5 @@
 import QtQuick
-import "./services" as Services
+import "../services" as Services
 
 // Clock card — control-center-style two-column panel. The pill morphs to
 // modes.clock (620x520) and this centers inside it.

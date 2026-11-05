@@ -2,8 +2,8 @@
 // modules-right split: two Columns side by side with a thin Rectangle
 // standing in for the "|".
 
-import "./modules"
-import "./services" as Services
+import "../modules"
+import "../services" as Services
 import QtQuick
 import Quickshell
 import Quickshell.Networking
