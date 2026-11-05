@@ -44,7 +44,7 @@ Singleton {
 
     onOpenChanged: {
         if (!open) return
-        const fm = Hyprland.focusedMonitor
+        const fm = Compositor.monitor
         ownerScreen = fm ? fm.name
             : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
     }

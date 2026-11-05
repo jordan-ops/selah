@@ -20,9 +20,9 @@ Variants {
         required property var modelData
         screen: modelData
 
-        readonly property bool hidden: !!Hyprland.focusedMonitor?.activeWorkspace?.hasFullscreen
+        readonly property bool hidden: Services.Compositor.hasFullscreen
             || Services.GameMode.enabled
-        readonly property bool owns: (Hyprland.focusedMonitor?.name ?? "") === modelData.name
+        readonly property bool owns: (Services.Compositor.monitor?.name ?? "") === modelData.name
             && Services.Tuck.tucked.length > 0
             && !win.hidden
 
@@ -32,6 +32,11 @@ Variants {
         visible: win.owns
         anchors { top: true; bottom: true; right: true }
         implicitWidth: 320
+        // Transparent: only the tab pills and hover card paint; the rest
+        // of the 320px strip shows the wallpaper/windows behind (same as
+        // the bar — the Nov-2 "opaque because XRGB" change here just made
+        // the whole strip a solid background-coloured band, which is not
+        // what a tuck rail is for; verified live, no black slab).
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Top

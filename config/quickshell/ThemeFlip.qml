@@ -134,7 +134,7 @@ Scope {
             screen: modelData
 
             anchors { top: true; left: true; right: true; bottom: true }
-            color: "transparent"
+            color: Services.Colors.background
             exclusionMode: ExclusionMode.Ignore
             mask: Region {}
             WlrLayershell.layer: WlrLayer.Overlay

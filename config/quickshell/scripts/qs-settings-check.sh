@@ -9,7 +9,7 @@
 # (used to exercise the failure path against a deliberately broken copy).
 set -u
 
-CONF_DIR="${QSCONFIG_DIR:-/home/jordanzo/.config/quickshell}"
+CONF_DIR="${QSCONFIG_DIR:-/home/jordan-sama/.config/quickshell}"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

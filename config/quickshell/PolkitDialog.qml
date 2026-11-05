@@ -33,7 +33,7 @@ Variants {
             && Services.Polkit.ownerScreen === (modelData ? modelData.name : "")
 
         visible: owns
-        color: "transparent"
+        color: Services.Colors.background
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay

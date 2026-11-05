@@ -1,7 +1,10 @@
 {
   "name": "selah_video_downloader",
   "description": "Selah: download the playing video into ~/Videos with yt-dlp",
-  "path": "/home/jordanzo/.local/share/selah-video-dl/selah-dl.py",
+  "path": "/home/jordan-sama/.local/share/selah-video-dl/selah-dl.py",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://ccdjpghloppngiaiaaahajkpedepljfl/"]
+  "allowed_origins": [
+    "chrome-extension://haccjembbbjlmhbfokjkbacdhlikfomd/",
+    "chrome-extension://ccdjpghloppngiaiaaahajkpedepljfl/"
+  ]
 }

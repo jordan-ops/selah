@@ -33,7 +33,36 @@ hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("bash ~/.local/bin/aspect-fit.sh"))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ action = "toggle" }))
 hl.bind(mainMod .. " + ALT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(menu))
-hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
+-- Pin: the window stays visible on every workspace, so it "follows" you.
+-- Hyprland only pins floating, non-fullscreen windows (the pin dispatcher
+-- refuses anything else), so a tiled window gets floated and a fullscreen
+-- one un-fullscreened first. Unpinning sends a window we floated ourselves
+-- back into the tiling; pseudo-tile kept its P, on SHIFT + P now.
+local pinnedFloated = {} -- stable_ids we floated to make the pin possible
+hl.bind(mainMod .. " + P", function()
+    local w = hl.get_active_window()
+    if not w then return end
+    if w.pinned then
+        hl.dispatch(hl.dsp.window.pin({ action = "disable" }))
+        if pinnedFloated[w.stable_id] then
+            pinnedFloated[w.stable_id] = nil
+            hl.dispatch(hl.dsp.window.float({ action = "disable" }))
+        end
+    else
+        if w.fullscreen ~= 0 then
+            hl.dispatch(hl.dsp.window.fullscreen({
+                mode   = w.fullscreen == 1 and "maximized" or "fullscreen",
+                action = "unset",
+            }))
+        end
+        if not w.floating then
+            pinnedFloated[w.stable_id] = true
+            hl.dispatch(hl.dsp.window.float({ action = "enable" }))
+        end
+        hl.dispatch(hl.dsp.window.pin({ action = "enable" }))
+    end
+end) -- pin: window sticks to every workspace (press again to unpin)
+hl.bind(mainMod .. " + SHIFT + P", hl.dsp.window.pseudo()) -- pseudo-tile (moved from mainMod + P)
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
@@ -108,7 +137,7 @@ hl.bind(mainMod .. " + SHIFT + V",             hl.dsp.exec_cmd("qs ipc call clip
 -- Push-to-talk dictation for the OpenCode session: tap → speak → tap
 -- again; whisper.cpp transcribes and the transcript lands in the live
 -- session via `opencode run` (~/.local/bin/selah-voice holds the loop).
-hl.bind(mainMod .. " + D",                     hl.dsp.exec_cmd("/home/jordanzo/.local/bin/selah-voice"))
+hl.bind(mainMod .. " + D",                     hl.dsp.exec_cmd("/home/jordan-sama/.local/bin/selah-voice"))
 hl.bind(mainMod .. " + ALT + U",               hl.dsp.exec_cmd("qs ipc call updates toggle"))
 hl.bind(mainMod .. " + semicolon",             hl.dsp.exec_cmd("qs ipc call settingsapp toggle"))  -- settings app
 hl.bind(mainMod .. " + H",                     hl.dsp.exec_cmd("qs ipc call bar toggle"))          -- hide/show the bar (session-only)

@@ -22,7 +22,9 @@ Variants {
         screen: modelData
 
         anchors { top: true; bottom: true; left: true; right: true }
-        color: "transparent"
+        // Opaque: this GL/Wayland path has no window alpha, so a
+        // transparent surface composites as black before the image loads.
+        color: Services.Colors.background
 
         // Our hard-won lesson (kept from the original's Background.qml):
         // never park the background layer with updates disabled — the

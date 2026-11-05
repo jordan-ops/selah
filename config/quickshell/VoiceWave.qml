@@ -52,7 +52,7 @@ Scope {
 
         sourceComponent: PanelWindow {
             id: win
-            screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+            screen: Quickshell.screens.find(s => s.name === Services.Compositor.monitor?.name)
                 ?? Quickshell.screens[0]
             // layer-shell has no center anchor — full-width transparent
             // strip (EdgeLight's pattern), the capsule centers inside it
@@ -66,7 +66,7 @@ Scope {
             // a per-minute window resize is exactly the Bar.qml lesson —
             // the text slot is wide enough for "99:59" so nothing moves
             implicitHeight: 54
-            color: "transparent"
+            color: Services.Colors.background
             exclusionMode: ExclusionMode.Ignore
             mask: Region {}                       // never eats a click
             WlrLayershell.layer: WlrLayer.Overlay

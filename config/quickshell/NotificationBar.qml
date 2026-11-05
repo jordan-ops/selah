@@ -11,7 +11,7 @@ PanelWindow {
     implicitHeight: notifColumn.height
     margins.right: 12
     margins.top: 60
-    color: "transparent"
+    color: Services.Colors.background
 
     // window height follows the column's real height, animated —
     // same idea as the pill morph: content decides size, window follows it.

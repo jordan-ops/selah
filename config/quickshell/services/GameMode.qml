@@ -103,6 +103,11 @@ Singleton {
     }
 
     function push(pairs) {
+        // compositor-side quieting is hyprctl/lua-only for now: mango's
+        // setoption has no matching get, so there is nothing safe to
+        // capture-and-replay. Under mango GameMode still quiets DND and
+        // quickshell's own animations — just not the compositor's.
+        if (Compositor.isMango) return
         evalProc.command = ["hyprctl", "eval", configExpr(pairs)]
         evalProc.running = false
         evalProc.running = true
@@ -116,6 +121,7 @@ Singleton {
         saved = null
         enabled = true
         // one bash, sequential — output order matches Object.keys order
+        if (Compositor.isMango) return   // no getoption under mango (see push)
         captureProc.command = ["bash", "-c",
             Object.keys(tweaks).map(o => "hyprctl getoption " + o).join(" ; ")]
         captureProc.running = false
@@ -186,7 +192,15 @@ Singleton {
         interval: 2000
         repeat: true
         running: root.classes.length > 0
-        onTriggered: focusProc.running = true
+        onTriggered: {
+            // mango's focusing-client stream already carries the appid —
+            // no subprocess, just read the cached state
+            if (Compositor.isMango) {
+                root.evaluateFocus(Mango.focusedClient?.appid ?? "")
+            } else {
+                focusProc.running = true
+            }
+        }
     }
     Process {
         id: focusProc

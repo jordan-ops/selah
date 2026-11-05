@@ -151,7 +151,7 @@ Written for one machine, so a few things assume this user and hardware:
 
 | Thing | Note |
 |---|---|
-| `/home/jordanzo` in 4 files | `aether` blueprint (`kl.json`) + three `.aether-generated` provenance markers — cosmetic only: the saved palette still loads, and every marker rewrites itself on your next wallpaper pick. Nothing needs editing by hand — `selah-sddm.sh` resolves your home at runtime, `fastfetch` reads `~`, and `install.sh` retargets seeded state as it copies it. |
+| `/home/jordan-sama` in 4 files | `aether` blueprint (`kl.json`) + three `.aether-generated` provenance markers — cosmetic only: the saved palette still loads, and every marker rewrites itself on your next wallpaper pick. Nothing needs editing by hand — `selah-sddm.sh` resolves your home at runtime, `fastfetch` reads `~`, and `install.sh` retargets seeded state as it copies it. |
 | `packages/aur.txt` | `nvidia-470xx-dkms`/`-utils` are gated behind the installer's NVIDIA question (default no — right for VMs/new GPUs; a decline prints the `yay -S` command). Seven `*-debug` AUR entries were removed: purged upstream, and `yay -S` fails the whole batch on one unknown target. |
 | `monitors.lua` | `1920x1080@60.06Hz` on `output = ""` |
 | `autostart.lua` | starts `megasync` (your backups) |

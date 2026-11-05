@@ -1,4 +1,10 @@
 [[entry]]
+played_at = "2026-10-31T14:40:38Z"
+path = "http://5229.cloudrad.io:8316/;"
+title = "Capital FM"
+genre = "news"
+
+[[entry]]
 played_at = "2026-10-28T04:02:15Z"
 path = "http://media-ice.musicradio.com/CapitalMP3"
 title = "Capital FM London"
@@ -22,12 +28,6 @@ path = "https://radio.cliamp.stream/lofi/tracks/8ad369a0c92a852e"
 title = "it's perfect weather for a trip to the café, don't you think-"
 artist = "AvapXia"
 album = "summer lofi"
-
-[[entry]]
-played_at = "2026-10-19T03:01:48Z"
-path = "http://5229.cloudrad.io:8316/;"
-title = "Capital FM"
-genre = "news"
 
 [[entry]]
 played_at = "2026-10-12T14:20:35Z"

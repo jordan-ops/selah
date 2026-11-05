@@ -75,25 +75,26 @@ Variants {
         WlrLayershell.layer: (pill.osdVisible || pill.notifVisible || Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.ControlCenter.open || Services.ClockCard.open || Services.Clipboard.open || Services.PowerMenu.open || Services.SettingsApp.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrLayer.Overlay : WlrLayer.Top
         anchors{ top: true; left:true; right:true}
 
-        // FIXED window height = the tallest size any pill mode can reach
-        // (the old `Math.min(560, pill.height + 24)` bound made the surface
-        // resize on EVERY spring frame — hyprctl measured 54 -> 346 -> 54
-        // frame by frame during a launcher open — and a per-frame surface
-        // resize is precisely what made morphs choppy: Qt/compositor scales
-        // the in-flight frame to the new size, which is where the visible
-        // "text and icons stretch" came from). The pill now springs inside
-        // a static surface: nothing resizes, nothing gets scaled.
+        // Surface sized to the content that is actually drawn — the
+        // window keeps the small size it adopted when the old fixed
+        // 1920x560 slab was retired (a fixed height made every morph
+        // resize-free but painted a huge surface; height now follows the
+        // pill's *target* size, not its animated height, so a morph
+        // still doesn't resize the surface on every spring frame).
         //
-        // `mask` keeps input correct despite the big surface: only the
-        // pill + the activity chips are clickable, everything else passes
-        // through to the windows behind. The chips (updates/rec) live just
-        // past the pill's right edge — they need their own combined region
-        // or their MouseAreas are click-through. Media used to be a chip
-        // here too; it moved inside the pill as MediaVisualiser, covered
-        // by the pill's own region. Child regions with
-        // `item` resolve that item's geometry directly, so the rects land
-        // where the chips actually are.
-        implicitHeight: 560
+        // It is TRANSPARENT, not opaque: the floating pill shows the
+        // wallpaper in the gap above the capsule and around it, and an
+        // opaque background-colour fill paints over that gap — which is
+        // exactly how the floating look got lost. (A Nov-2 change made
+        // the window opaque after an XRGB8888/no-alpha trace, but the
+        // transparent selah bar rendered correctly on this same machine
+        // on Nov-5 — see `color` below.)
+        //
+        // `mask` keeps input confined to the pill + activity chips;
+        // everything else in the window is click-through.
+        readonly property real surfaceHeight: pill.targetSize.height
+            + (trayPopup.popShown ? 4 + trayCard.height : 0)
+        implicitHeight: toplevel.floatGap + surfaceHeight
         // True while one of the pill's modal panels owns the screen. The
         // pill's modes are exclusive (each panel's openPanel() closes the
         // others), so at most one is ever set — this just means "a panel is
@@ -201,7 +202,21 @@ Variants {
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 35 + floatGap
 
-        color:"transparent"
+        // Transparent: the floating pill shows the wallpaper both in the
+        // gap above the capsule and around its sides (the pill is a
+        // centred capsule, narrower than the screen), so an opaque
+        // background-colour fill here paints that away — the fill IS the
+        // lost floating look. Unpainted pixels only ever cover the strip
+        // the pill + panels occupy (surfaceHeight above).
+        //
+        // Nov-2 made this opaque after tracing XRGB8888 (no alpha) from
+        // Qt's GL/dmabuf path — "transparent composites black". But the
+        // transparent selah bar rendered the wallpaper correctly on this
+        // very machine on Nov-5, so the format evidently comes out ARGB
+        // at least sometimes (the trace pointed at a first-map ordering
+        // race). Verified live after this change; if a black slab ever
+        // reappears, re-check with `grim` before re-opaquing.
+        color: "transparent"
         // Clipboard.open was missing here, so the paste window sat at
         // WlrKeyboardFocus.None: its search field could never take focus and
         // Escape could not be delivered at all. Everything with a text field
@@ -231,28 +246,9 @@ Variants {
         // on one surface is the fight described above).
         WlrLayershell.keyboardFocus: (Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.Clipboard.open || Services.ClockCard.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-        // Live global geometry of the pill — pushed into services/BarMetrics
-        // for EdgeLight's orbit glow (and re-pushed whenever the pill
-        // morphs, the tray slot changes or content width moves it).
-        readonly property rect pillGlobal: Qt.rect(
-            (toplevel.screen.x ?? 0) + pill.x,
-            (toplevel.screen.y ?? 0) + pill.y,
-            pill.width, pill.height)
-        function publishPill() {
-            Services.BarMetrics.update(modelData.name, {
-                x: pillGlobal.x, y: pillGlobal.y,
-                w: pillGlobal.width, h: pillGlobal.height,
-                r: pill.morphRadius })
-        }
-        Component.onCompleted: publishPill()
-        Connections {
-            target: toplevel
-            function onPillGlobalChanged() { toplevel.publishPill() }
-        }
-        Connections {
-            target: pill
-            function onMorphRadiusChanged() { toplevel.publishPill() }
-        }
+        // EdgeLight (the notification glow around the pill) and its
+        // BarMetrics publish hooks stay removed — the glow itself was
+        // dropped along with its component. The pill flash remains.
 
         Rectangle{
             id: pill
@@ -963,8 +959,38 @@ Variants {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    BatteryRing {
+                    // iOS battery + wifi, split out of the old combo ring.
+                    // Clicking either opens the control centre directly —
+                    // the pill's own hoverArea would otherwise just pin the
+                    // expanded row under the pointer (which is what a click
+                    // on empty capsule still does).
+                    Item {
+                        id: compactStatus
                         anchors.verticalCenter: parent.verticalCenter
+                        width: compactStatusRow.width
+                        height: compactStatusRow.height
+
+                        Row {
+                            id: compactStatusRow
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+
+                            BatteryIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                // sits on the pill, not on a surface chip
+                                background: Services.Colors.panel
+                            }
+
+                            WifiIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Services.ControlCenter.toggle()
+                        }
                     }
                 }
 
@@ -1083,7 +1109,7 @@ Variants {
                         }
                     }
 
-                    // battery/network/power grouped into one pill — clicking anywhere
+                    // battery/wifi/power grouped into one pill — clicking anywhere
                     // in it opens the control center. the power icon keeps its own
                     // MouseArea on top, so clicking IT still opens the power menu
                     // directly (it used to be commented out = dead control, not anymore)
@@ -1105,23 +1131,17 @@ Variants {
                             anchors.centerIn: parent
                             spacing: 10
 
-                            // battery ring with the wifi glyph in its middle —
-                            // clicking it (or the chip around it) opens the CC
-                            BatteryRing {
+                            // iOS battery + wifi glyph, split apart (the
+                            // ring used to carry both): the % lives inside
+                            // the battery when bar.batteryText is on, and
+                            // the network is icon-only. Clicking the chip —
+                            // or the ⏻ on top of it — still opens the CC.
+                            BatteryIcon {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            // network value: SSID for wifi, plain state otherwise —
-                            // elided so one long SSID can't blow the pill open
-                            Text {
-                                font.family: Services.Fonts.family
+                            WifiIcon {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.min(implicitWidth, 84)
-                                elide: Text.ElideRight
-                                text: Services.Network.isWifi ? Services.Network.name
-                                    : (Services.Network.connected ? "Wired" : "Offline")
-                                color: Services.Colors.textMuted
-                                font.pixelSize: 11
                             }
 
                             Text {
@@ -1151,7 +1171,7 @@ Variants {
                 //
                 // Position is unchanged: still anchored to the pill's right
                 // edge with rightGroup shifted left by traySlot, which puts
-                // this immediately after statusGroup (battery + network +
+                // this immediately after statusGroup (battery · wifi ·
                 // power) — the last child of rightGroup.
                 Rectangle {
                     id: trayChip
@@ -2954,7 +2974,7 @@ Variants {
         // In-window card. This USED to be a PopupWindow — QuickShell's
         // PopupWindow is a ProxyPopupWindow: its pixels composite into the
         // PARENT window's surface (hyprctl layers confirms: no popup
-        // surface ever appears, only the bar's own 1920x560 surface),
+        // surface ever appears, only the bar's own surface),
         // which made it subject to the bar's input mask — a mask that
         // covered only the pill + chips, so every click on the card fell
         // through to the window behind the bar (see the tray Region in
@@ -3518,7 +3538,7 @@ Variants {
         // Settings app — its own centered card window instead of a pill
         // morph: this is document-scale UI with a sidebar, and the launcher
         // deep-links into it (SettingsApp.page/focusId). toplevel only ever
-        // grows with the pill (max 560), so vertical centering anchors to
+        // grows with the pill, so vertical centering anchors to
         // the screen. Entrance is a SLIDE: the card drops in from just off
         // the top edge and settles centred, and climbs back out on close
         // (M3's "enter/exit the screen" pair) — it no longer grows from a

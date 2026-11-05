@@ -24,7 +24,6 @@ Singleton {
         // top edge) — off keeps the flush bar every theme expects
         "bar.floating": false,
         "effects.ripple": true,
-        "effects.edgelight": true,
         // short chime on high-priority capsule flashes (plug/charge) —
         // Bar's chime(), silenced from Settings ▸ Animations
         "effects.tone": true,
@@ -66,14 +65,12 @@ Singleton {
     // pill, or `qs ipc call settings set bar.floating true`.
     readonly property bool barFloating:
         values["bar.floating"] === true || values["bar.floating"] === "true"
-    // The gap itself, in px — ONE number, shared by Bar.qml (the pill's
-    // top offset and the reserved strip) and by anything that has to
-    // GUESS the pill's position without the bar having published it
-    // (BarMetrics' fallback rect below). Keeping it here is what stops
-    // the notification glow sitting flush on the edge while the capsule
-    // floats.
+    // The gap itself, in px — ONE number, shared by Bar.qml's pill top
+    // offset, the reserved strip, and the bar window's own height.
     readonly property int barFloatGap: 8
-    // iPhone-style % number on the battery ring — hidden until toggled
+    // iPhone-style % number drawn inside the bar's battery icon —
+    // hidden until toggled (BatteryRing reads the same flag for its
+    // number in the gap, in the Control Center)
     readonly property bool barBatteryText:
         values["bar.batteryText"] === true || values["bar.batteryText"] === "true"
     // the capsule's alert chime (Bar.qml) — off means the flash still

@@ -9,8 +9,8 @@ Singleton{
     // A VM or desktop has no laptop battery — UPower still serves a
     // composite displayDevice that reads 0 %, which used to draw a
     // permanent "0%" ring and could trip the low-battery alert. Everything
-    // below gates on hasBattery; the bar hides the ring's arc/percentage
-    // but keeps the network glyph that lives inside it.
+    // below gates on hasBattery; the bar hides the whole battery icon
+    // (the network glyph is its own component now, so it stays regardless).
     readonly property bool hasBattery:
         UPower.devices.values.some(d => d.isLaptopBattery)
     readonly property int percent:
@@ -168,8 +168,9 @@ Singleton{
 
     onChargingChanged: {
         if (!hasBattery) return
-        // the "Charging" notification is gone: BatteryRing's chargePulse
-        // animation says it quieter (ring waves on plug-in). The
+        // the "Charging" notification is gone: the battery icon's
+        // chargePulse (bar) and the ring's (control center) say it
+        // quieter — a single pop/wave on plug-in. The
         // low-battery critical above stays — that one you want loud.
         // turn the graph curve immediately at plug/unplug
         grabSample(true)

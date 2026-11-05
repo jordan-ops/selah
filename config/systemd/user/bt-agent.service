@@ -6,7 +6,7 @@ Wants=dbus.service
 
 [Service]
 Type=simple
-ExecStart=/home/jordanzo/.dotfiles/config/systemd/user/bt-agent.sh
+ExecStart=/home/jordan-sama/.dotfiles/config/systemd/user/bt-agent.sh
 # bluetoothctl exiting = the agent is gone; come straight back up.
 Restart=always
 RestartSec=3

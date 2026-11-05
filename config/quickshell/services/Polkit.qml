@@ -63,7 +63,7 @@ Singleton {
                 root.submitted = false
                 root.errorFlash = false
                 root.failures = 0
-                const fm = Hyprland.focusedMonitor
+                const fm = Compositor.monitor
                 root.ownerScreen = fm ? fm.name
                     : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
             } else if (!root.closing) {

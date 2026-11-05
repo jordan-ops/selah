@@ -278,8 +278,8 @@ Singleton {
         "default": false,
         "key": "bar.batteryText",
         "label": "Battery percentage",
-        "description": "Show the % number in the battery ring's top gap",
-        "keywords": "battery percent ring number text status wifi charge"
+        "description": "Show the % number inside the battery icon",
+        "keywords": "battery percent number text status wifi charge icon"
     }, {
         "id": "barFloating",
         "page": "display",
@@ -570,15 +570,6 @@ Singleton {
         "label": "Desktop ripples",
         "description": "Ripple rings where the desktop is clicked · motion + game mode gates still apply",
         "keywords": "ripple click ring effect decoration desktop water pulse shell"
-    }, {
-        "id": "fxEdgeLight",
-        "page": "animations",
-        "type": "switch",
-        "default": false,
-        "key": "effects.edgelight",
-        "label": "Notification edge glow",
-        "description": "Accent light sweeping around the bar pill when a notification lands",
-        "keywords": "notification glow edge light bar pill alert effect decoration shell"
     }, {
         "id": "fxTone",
         "page": "animations",

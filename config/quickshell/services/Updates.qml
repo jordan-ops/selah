@@ -19,7 +19,7 @@ Singleton {
     property string ownerScreen: ""
     onOpenChanged: {
         if (open) {
-            const fm = Hyprland.focusedMonitor
+            const fm = Compositor.monitor
             ownerScreen = fm ? fm.name
                 : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
         }
@@ -125,7 +125,7 @@ Singleton {
             // same single-owner rule as the picker: the focused screen
             // records itself, every other screen's window stays hidden —
             // two Exclusive surfaces would fight over keyboard focus.
-            const fm = Hyprland.focusedMonitor
+            const fm = Compositor.monitor
             repoOwner = fm ? fm.name
                 : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
         }

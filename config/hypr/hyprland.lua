@@ -34,20 +34,23 @@ require("input")
 require("binds") -- requires programs.lua itself
 require("rules")
 
-force_default_wallpaper = 0
--- Theme colors, once switch-theme.sh has generated the file.
--- pcall so a missing file is not a config error.
-local ok, err = pcall(require, "colors")
-if not ok and not tostring(err):find("colors") then
-	error(err)
+-- Optional module: absent before a theme/user setting has ever been
+-- generated, which is not an error. Any OTHER failure (syntax error,
+-- bad value) is re-raised — matching on the module name alone silently
+-- swallowed real errors, since every error message contains the path.
+local function require_optional(name)
+	local ok, err = pcall(require, name)
+	if ok then return end
+	local msg = tostring(err)
+	if msg:find("not found", 1, true) or msg:find("cannot open", 1, true) then
+		return
+	end
+	error(err, 0)
 end
 
+-- Theme colors, once switch-theme.sh has generated the file.
+require_optional("colors")
+
 -- User overrides written by quickshell's settings app (Apply) — required
--- LAST so they win over appearance/input defaults above. pcall so a
--- missing file (nothing applied yet) is not a config error. NOTE: the
--- find() pattern must escape '-' — in Lua patterns it is a quantifier,
--- and an unescaped one made the guard never match (config-error spam).
-local uok, uerr = pcall(require, "user-settings")
-if not uok and not tostring(uerr):find("user%-settings") then
-	error(uerr)
-end
+-- LAST so they win over appearance/input defaults above.
+require_optional("user-settings")

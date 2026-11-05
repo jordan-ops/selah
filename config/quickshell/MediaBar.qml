@@ -12,7 +12,7 @@ PanelWindow {
     implicitWidth: 140
     implicitHeight: 50
     margins.right: 12
-    color: "transparent"
+    color: Colors.background
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
 
@@ -30,7 +30,7 @@ PanelWindow {
         anchor.rect.y: 50
         implicitWidth: 480
         implicitHeight: 220
-        color: "transparent"
+        color: Colors.background
         visible: pill.expanded
 
         Rectangle {

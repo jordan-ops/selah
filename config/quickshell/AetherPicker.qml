@@ -56,7 +56,7 @@ Variants {
             && Services.Aether.ownerScreen === (modelData ? modelData.name : "")
 
         visible: owns
-        color: "transparent"
+        color: Services.Colors.background
         anchors { top: true; bottom: true; left: true; right: true }
         // Full-screen overlay: never reserves space for the bar.
         exclusionMode: ExclusionMode.Ignore

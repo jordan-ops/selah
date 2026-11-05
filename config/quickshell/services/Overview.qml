@@ -49,7 +49,7 @@ Singleton {
     function beginOpen() {
         if (open) return
         Hyprland.refreshToplevels()
-        const fm = Hyprland.focusedMonitor
+        const fm = Compositor.monitor
         const mon = fm ? fm.name
             : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
         ownerScreen = mon
@@ -238,7 +238,13 @@ Singleton {
         close()
     }
 
-    function toggle() { open ? close() : beginOpen() }
+    // mango has its own overview (binds to toggleoverview/enteroverview,
+    // hotarea, etc.) — route there instead of opening the qs panel, whose
+    // window model is fed by Hyprland.toplevels and would render empty.
+    function toggle() {
+        if (Compositor.isMango) { Mango.dispatch("toggleoverview"); return }
+        open ? close() : beginOpen()
+    }
     function close() {
         captureFallback.stop()
         if (captureProc.running) captureProc.running = false
