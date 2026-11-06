@@ -53,7 +53,7 @@ Variants {
             anchors.fill: parent
             source: bgWindow.fileUrl(Services.Wallpapers.current)
             fillMode: Image.PreserveAspectCrop
-            asynchronous: true
+            asynchronous: false
             cache: true
         }
 
