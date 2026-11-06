@@ -191,30 +191,10 @@ Item {
         // they must be reachable from the compact capsule too,
         // not just from this expanded row.
 
-
         
-        // clipboard history — same self-contained glyph+MouseArea
-        // shape as the ⏻ below; opens the pill's clipboard mode
-        // (\uD838\uDCEA = U+F0EA, FA clipboard, covered by Mononoki)
-        Text {
-            font.family: Services.Fonts.family
-            text: "\uD838\uDCEA"
-            color: Services.Colors.text
-            font.pixelSize: 14
-            font.bold: true
-            anchors.verticalCenter: parent.verticalCenter
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Services.Clipboard.toggle()
-            }
-        }
 
         // battery/wifi/power grouped into one pill — clicking anywhere
-        // in it opens the control center. the power icon keeps its own
-        // MouseArea on top, so clicking IT still opens the power menu
-        // directly (it used to be commented out = dead control, not anymore)
+        // in it opens the control center.
         Rectangle {
             id: statusGroup
             width: statusRow.width + 20

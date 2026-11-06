@@ -51,41 +51,60 @@ Row {
             urgent: t.is_urgent === true,
             special: false
         }))
-        : root.workspaceIds.map(id => ({
-            id: id,
-            active: Hyprland.focusedWorkspace?.id === id,
-            occupied: false,
-            urgent: false,
-            special: id < 0   // Hyprland gives special/scratchpad workspaces a
-                              // negative id — the documented way to tell them apart
-        }))
+        : root.workspaceIds.map(id => {
+            const ws = Hyprland.workspaces.values.find(w => w.id === id)
+            return {
+                id: id,
+                active: Hyprland.focusedWorkspace?.id === id,
+                occupied: ws && ws.windows ? ws.windows.length > 0 : false,
+                urgent: false,
+                special: id < 0   // Hyprland gives special/scratchpad workspaces a
+                                  // negative id — the documented way to tell them apart
+            }
+        })
 
     Repeater {
         model: root.items
 
-        delegate: Rectangle {
-            id: dot
+        delegate: Item {
+            id: wrap
+            width: 18
+            height: 26
             required property var modelData
             readonly property bool isActive: modelData.active
-            readonly property bool isSpecial: modelData.special
             readonly property bool isUrgent: modelData.urgent
-            // compact capsule is only 30px tall — keep the dots well inside
-            // it (was 14/22, which read as huge next to the clock)
-            width: isActive ? 16 : 10
-            height: 10
-            radius: isSpecial ? 2.5 : 5   // small radius = square-ish diamond, 5 = full circle
-            rotation: isSpecial ? 45 : 0
-            color: isUrgent && !isActive ? Colors.critical
-                : isActive ? Colors.accent
-                : Qt.rgba(Colors.text.r, Colors.text.g, Colors.text.b,
-                          modelData.occupied ? 0.45 : 0.25)
 
-            Behavior on width { SpringAnimation { spring: Motion.spatialFastSpring; damping: Motion.spatialFastDamping } }
-            Behavior on color { ColorAnimation { duration: Motion.short3; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.standardCurve } }
+            // glow behind the active workspace — larger translucent
+            // accent rect, sits behind the box so it bleeds slightly
+            Rectangle {
+                width: 12
+                height: 20
+                radius: 6
+                color: isActive
+                    ? Qt.rgba(Colors.accent.r, Colors.accent.g, Colors.accent.b, 0.30)
+                    : "transparent"
+                anchors.centerIn: parent
+                Behavior on color { ColorAnimation { duration: Motion.short3; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.standardCurve } }
+            }
 
-            MouseArea {
-                anchors.fill: parent
-                onClicked: Compositor.viewTag(dot.modelData.id)
+            // the box itself: slight rounded corners, always the same
+            // size so the strip never churns as workspaces activate
+            Rectangle {
+                id: dot
+                width: 8
+                height: 18
+                radius: 4
+                color: isUrgent && !isActive ? Colors.critical
+                    : isActive ? Colors.accent
+                    : modelData.occupied ? Qt.rgba(Colors.accent.r, Colors.accent.g, Colors.accent.b, 0.22)
+                    : Qt.rgba(Colors.text.r, Colors.text.g, Colors.text.b, 0.14)
+                anchors.centerIn: parent
+                Behavior on color { ColorAnimation { duration: Motion.short3; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.standardCurve } }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: Compositor.viewTag(wrap.modelData.id)
+                }
             }
         }
     }
