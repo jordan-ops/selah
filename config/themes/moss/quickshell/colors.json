@@ -8,5 +8,15 @@
     "on_surface_variant": "#61666b",
     "error": "#967b83",
     "outline": "#1f262c"
+  },
+  "qtc": {
+    "background": "#060e14",
+    "surface": "#060e14",
+    "surfaceAlt": "#1f262c",
+    "accent": "#9ba4bb",
+    "text": "#b1d2d1",
+    "textMuted": "#61666b",
+    "critical": "#967b83",
+    "low": "#1f262c"
   }
 }

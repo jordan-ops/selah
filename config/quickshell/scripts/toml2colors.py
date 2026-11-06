@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Derive quickshell's colors.json (md3 keys) from a theme's colors.toml.
+"""Derive quickshell's colors.json from a theme's colors.toml.
 
 Selah themes are flat palettes (background / foreground / accent / muted /
-dark_background / lighter_background / selection / red ...), while
-services/Colors.qml reads md3.background, md3.surface_variant,
-md3.secondary_container, md3.primary, md3.on_background,
-md3.on_surface_variant, md3.error, md3.outline.
+dark_background / lighter_background / selection / red ...), while QML wants
+semantic, quirk-free names. Two blocks are emitted:
 
-This maps one to the other with fallback chains so themes missing the
-optional theme keys still produce a complete file.
+  md3  — the historical Material-3 key names services/Colors.qml has always
+         read (and modules/ThemePicker.qml reads for swatches). Unchanged
+         derivation, so every existing theme keeps producing the same file.
+  qtc  — the unified palette block Palette.qml reads: camelCase semantic
+         roles (background/surface/surfaceAlt/accent/text/textMuted/critical/
+         low). Values come from an optional [qtc] table in colors.toml when
+         the theme spells them out, otherwise they derive from the same flat
+         keys as md3 — so themes written before qtc behave identically.
 
 Usage: toml2colors.py <colors.toml> <colors.json>
 """
@@ -55,9 +59,28 @@ def main():
         "outline": pick(colors, "selection", "muted", default="#555555"),
     }
 
+    # qtc mirrors md3's derivations under QML-semantic names, then lets an
+    # explicit [qtc] table override any of them (a theme can pin textMuted
+    # without disturbing the flat `muted` key other apps read).
+    qtc = {
+        "background": md3["background"],
+        "surface": md3["surface_variant"],
+        "surfaceAlt": md3["secondary_container"],
+        "accent": md3["primary"],
+        "text": md3["on_background"],
+        "textMuted": md3["on_surface_variant"],
+        "critical": md3["error"],
+        "low": md3["outline"],
+    }
+    explicit = colors.get("qtc")
+    if isinstance(explicit, dict):
+        for key, value in explicit.items():
+            if isinstance(value, str) and value:
+                qtc[key] = value
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_name(dst.name + ".tmp")
-    tmp.write_text(json.dumps({"md3": md3}, indent=2) + "\n")
+    tmp.write_text(json.dumps({"md3": md3, "qtc": qtc}, indent=2) + "\n")
     tmp.replace(dst)
 
 

@@ -1,25 +1,38 @@
 pragma Singleton
 import Quickshell
-import Quickshell.Io
 import QtQuick
+// Palette is shadowed as a bare name by QtQuick's `Palette` value type
+// (QQuickPalette), which resolves to a property-less wrapper instead of
+// this directory's singleton — so the delegation below goes through an
+// explicit directory import (`Svc.Palette`), the same resolution path
+// `Services.Palette` takes from outside.
+import "." as Svc
 
+// The shell's colour API — every surface binds Services.Colors.*.
+//
+// Raw tokens (background/surface/accent/text/…) come from
+// services/Palette.qml, the typed data layer that owns the colors.json
+// FileView and the qtc/md3 blocks. This file layers the derived roles on
+// top — WCAG contrast floors, the solid-accent-with-text surface, the
+// transparency-aware panel — and keeps every historical name (md3,
+// text_muted, ensureContrast, contrastAgainst) so no consumer changes:
+// the API is the contract, Palette is the plumbing.
 Singleton {
     id: root
 
-    // raw parsed JSON — kept as "data" to avoid clashing with the
-    // "palette" key that already exists inside the JSON itself
-    property var data: ({})
-    readonly property var md3: data.md3 || ({})
+    // raw tokens — delegated to Palette (same names and values as the
+    // pre-Phase-C file; Palette just reads the file now)
+    readonly property color background: Svc.Palette.background
+    readonly property color surface:     Svc.Palette.surface
+    readonly property color surfaceAlt:  Svc.Palette.surfaceAlt
+    readonly property color accent:      Svc.Palette.accent
+    readonly property color text:        Svc.Palette.text
+    readonly property color critical:    Svc.Palette.critical
+    readonly property color low:         Svc.Palette.low
 
-    // fallback values match your current hardcoded colors, so nothing
-    // breaks before the file exists yet or a key is missing
-    readonly property color background:  md3.background            || "#282828"
-    readonly property color surface:     md3.surface_variant       || "#1f1f1f"
-    readonly property color surfaceAlt:  md3.secondary_container   || "#3a3a3a"
-    readonly property color accent:      md3.primary               || "#1db954"
-    readonly property color text:        md3.on_background         || "#ffffff"
-    readonly property color critical:    md3.error                 || "#e74c3c"
-    readonly property color low:         md3.outline                || "#555555"
+    // historical md3 block — widgets/Colors.qml reads md3.surface_variant /
+    // md3.on_surface_variant / md3.secondary_container off this
+    readonly property var md3: Svc.Palette.md3
 
     // on_surface_variant is tuned for M3's surface_variant chip, not this
     // shell's near-black `background` — matte-black ships #333333 on
@@ -27,8 +40,7 @@ Singleton {
     // comments, settings sidebar, row descriptions). Floor muted text at
     // ~3:1 against the background: lift dark-on-dark toward white,
     // darken light-on-light toward black, keep the theme's hue otherwise.
-    readonly property color textMuted: root.ensureContrast(
-        md3.on_surface_variant || "#aaaaaa", 3.0)
+    readonly property color textMuted: root.ensureContrast(Svc.Palette.textMuted, 3.0)
 
     // SOLID ACCENT SURFACES THAT CARRY TEXT — the launcher's selection
     // pill, the delete-confirm buttons, text-selection highlights. A
@@ -102,19 +114,5 @@ Singleton {
         const n = parseInt(raw === undefined || raw === null ? "0" : String(raw), 10)
         const t = isNaN(n) ? 0 : Math.max(0, Math.min(100, n))
         return Qt.rgba(background.r, background.g, background.b, 1 - t / 100)
-    }
-
-    FileView {
-        id: colorFile
-        path: Quickshell.env("HOME") + "/.local/state/quickshell/generated/colors.json"
-        watchChanges: true          // re-fires onFileChanged when matugen rewrites the file
-        onFileChanged: reload()
-        onLoaded: {
-            try {
-                root.data = JSON.parse(text())
-            } catch (e) {
-                console.log("Colors.qml: failed to parse colors.json —", e)
-            }
-        }
     }
 }
