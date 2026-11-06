@@ -66,7 +66,7 @@ hl.bind(mainMod .. " + SHIFT + P", hl.dsp.window.pseudo()) -- pseudo-tile (moved
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
--- Move focus with mainMod + arrow keys
+hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("qs ipc call media toggle"))
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
