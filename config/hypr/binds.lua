@@ -134,10 +134,6 @@ hl.bind(mainMod .. " + CTRL + SHIFT + space",  hl.dsp.exec_cmd("qs ipc call them
 hl.bind(mainMod .. " + ALT + W",               hl.dsp.exec_cmd("qs ipc call aether toggle"))      -- aether palette carousel (extract from wallpaper)
 hl.bind(mainMod .. " + SHIFT + N",             hl.dsp.exec_cmd("qs ipc call nightlight toggle"))
 hl.bind(mainMod .. " + SHIFT + V",             hl.dsp.exec_cmd("qs ipc call clipboard toggle"))   -- clipboard history
--- Push-to-talk dictation for the OpenCode session: tap → speak → tap
--- again; whisper.cpp transcribes and the transcript lands in the live
--- session via `opencode run` (~/.local/bin/selah-voice holds the loop).
-hl.bind(mainMod .. " + D",                     hl.dsp.exec_cmd("/home/jordan-sama/.local/bin/selah-voice"))
 hl.bind(mainMod .. " + ALT + U",               hl.dsp.exec_cmd("qs ipc call updates toggle"))
 hl.bind(mainMod .. " + semicolon",             hl.dsp.exec_cmd("qs ipc call settingsapp toggle"))  -- settings app
 hl.bind(mainMod .. " + H",                     hl.dsp.exec_cmd("qs ipc call bar toggle"))          -- hide/show the bar (session-only)

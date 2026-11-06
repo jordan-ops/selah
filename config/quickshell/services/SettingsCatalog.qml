@@ -829,13 +829,6 @@ Singleton {
         "keywords": "audio input device source default microphone headset"
     },
     {
-        "id": "audVoice",
-        "page": "audio",
-        "type": "voicecard",
-        "label": "Voice assistant",
-        "description": "Dictate into the session and hear replies — SUPER+D, off until you set it up",
-        "keywords": "voice assistant dictation speech whisper piper tts stt talk talkback super d reply spoken"
-    }, {
         "id": "netWifi",
         "page": "network",
         "type": "cmdswitch",

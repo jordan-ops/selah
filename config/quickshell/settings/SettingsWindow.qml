@@ -78,7 +78,7 @@ FocusScope {
     // of silently rendering the wrong control
     readonly property var knownTypes: ["section", "info", "action", "switch",
         "choice", "slider", "hyprswitch", "dropdown", "swatches", "wallpapers",
-        "carousel", "buttons", "cmdswitch", "cmdslider", "appmixer", "voicecard", "powercard", "netcard",
+        "carousel", "buttons", "cmdswitch", "cmdslider", "appmixer", "powercard", "netcard",
         "timecard", "textsize", "keybinds", "xcompose", "animcard",
         "lockstyle", "netlist", "btlist"]
 
@@ -86,7 +86,7 @@ FocusScope {
     // group-card container with plain rows and act as group breakers,
     // exactly like a section heading does (macOS inset-group parity)
     readonly property var ownCardTypes: ["powercard", "netcard", "timecard",
-        "carousel", "appmixer", "voicecard", "keybinds", "xcompose", "animcard",
+        "carousel", "appmixer", "keybinds", "xcompose", "animcard",
         "lockstyle", "netlist", "btlist"]
     function typeIsOwnCard(t) { return app.ownCardTypes.indexOf(t) >= 0 }
 
@@ -1323,7 +1323,7 @@ FocusScope {
                 readonly property bool isCard:
                     e.type === "powercard" || e.type === "netcard"
                     || e.type === "timecard" || e.type === "carousel"
-                    || e.type === "appmixer" || e.type === "voicecard"
+                    || e.type === "appmixer"
                     || e.type === "keybinds" || e.type === "xcompose"
                     || e.type === "animcard" || e.type === "lockstyle"
                     || e.type === "netlist" || e.type === "btlist"
@@ -1349,7 +1349,6 @@ FocusScope {
                     case "netlist":
                     case "btlist":
                     case "appmixer":
-                    case "voicecard": return 40
                     default:          return 210
                     }
                 }
@@ -1765,7 +1764,6 @@ FocusScope {
                 Component { id: compTime;     SettingsTimeCard      { e: row.e } }
                 Component { id: compCmdSlider; SettingsCmdSliderRow { e: row.e } }
                 Component { id: compAppMixer; SettingsAppMixerCard { e: row.e } }
-                Component { id: compVoice;   SettingsVoiceCard    { e: row.e } }
                 Component { id: compTextSize; SettingsTextSizeRow   { e: row.e } }
                 Component { id: compBinds;    SettingsKeybindsEditor { e: row.e } }
                 Component { id: compCompose;  SettingsComposeEditor  { e: row.e } }
@@ -1798,7 +1796,6 @@ FocusScope {
                         case "timecard":   return compTime
                         case "cmdslider":  return compCmdSlider
                         case "appmixer":   return compAppMixer
-                        case "voicecard":  return compVoice
                         case "textsize":   return compTextSize
                         case "keybinds":   return compBinds
                         case "xcompose":   return compCompose

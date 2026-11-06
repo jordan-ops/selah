@@ -55,7 +55,6 @@ ShellRoot{
     FlipClock{}      // flip clock screensaver — idle / `qs ipc call screensaver launch` (style: flip)
     AetherPicker{}   // aether wallpaper/palette overlay — qs ipc call aether toggle
     RepoUpdatePopup{}   // "a new deploy is ready" dialog — qs ipc call updates status
-    VoiceWave{}      // voice recording capsule (blob + live mic waveform) — services/VoiceRec, SUPER+D
     ThemeFlip{}      // frozen-frame theme-switch reveal — qs ipc call themeflip test
     CheatSheet{}     // keybinding cheat sheet — qs ipc call cheatsheet toggle (SUPER + /)
     Overview{}       // layout overview / floor-plan — qs ipc call overview toggle (SUPER + TAB)

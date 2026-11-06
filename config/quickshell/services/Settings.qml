@@ -50,12 +50,6 @@ Singleton {
         // install shows nothing yet (every show* family key is unset =
         // off) but the studio and quick-add are reachable immediately
         "widgets.showWidgets": true,
-        // the voice assistant (SUPER+D dictation + spoken replies) —
-        // OFF until turned on in Settings ▸ Audio, because first enable
-        // downloads the speech engine (~215 MB of whisper/piper models
-        // plus a pacman ask for whisper-cpp). Nothing about voice runs
-        // or is fetched while this sits false.
-        "voice.enabled": false
     })
 
     // typed accessor for keys the shell binds on — one line per new key
@@ -93,11 +87,6 @@ Singleton {
     // which lock layout lock/ draws — written by Settings ▸ Lock screen,
     // read live by LockScreen's Loader. Unknown values fall back to the
     // original layout rather than to a blank lock surface.
-    // Voice assistant master switch (Settings ▸ Audio ▸ Voice card);
-    // selah-voice reads the same key straight out of settings.json and
-    // stays completely inert while it's false.
-    readonly property bool voiceEnabled:
-        values["voice.enabled"] === true || values["voice.enabled"] === "true"
     readonly property string lockStyle: {
         const v = String(values["lock.style"] || "")
         return ["classic", "card", "minimal", "magazine", "clock"].indexOf(v) >= 0
