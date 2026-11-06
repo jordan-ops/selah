@@ -34,15 +34,22 @@ Item {
     height: col.implicitHeight
     readonly property real extraHeight: col.implicitHeight - 64
 
+    // Demand-gated on the window, not just the page: pageEntries doesn't
+    // reset on close, so these cards (and their pactl spawns) outlive a
+    // closed settings window — without this the 2 s sink-inputs poll runs
+    // forever after one visit to the Audio page. triggeredOnStart gives a
+    // fresh read the instant the window reopens.
     Timer {
-        interval: 2000; repeat: true; running: true; triggeredOnStart: true
+        interval: 2000; repeat: true
+        running: Services.SettingsApp.open; triggeredOnStart: true
         onTriggered: {
             streamsProc.running = false
             streamsProc.running = true
         }
     }
     Timer {
-        interval: 10000; repeat: true; running: true; triggeredOnStart: true
+        interval: 10000; repeat: true
+        running: Services.SettingsApp.open; triggeredOnStart: true
         onTriggered: {
             sinksProc.running = false
             sinksProc.running = true

@@ -27,6 +27,13 @@ Rectangle {
 
     id: root
 
+    // Vitals (CPU/RAM labels + sparkline) is demand-gated: this panel is
+    // the control center's only always-instantiated reader (Bar folds it
+    // behind an opacity gate, so it exists from startup), so it holds the
+    // 2 s /proc probe only while it's actually on screen.
+    onVisibleChanged: visible ? Services.Vitals.retain() : Services.Vitals.release()
+    Component.onCompleted: if (visible) Services.Vitals.retain()
+
     // Mirror Services.Notifications.history into grpModel as ONE ROW PER
     // APP (a group's slot follows its newest member, so a fresh message
     // bumps that group to the top). The service reassigns the whole array

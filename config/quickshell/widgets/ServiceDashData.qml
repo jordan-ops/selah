@@ -16,14 +16,15 @@ Singleton {
     readonly property var cpuHist: Services.Vitals.cpuHist.map(v => v / 100)
     readonly property var memHist: Services.Vitals.memHist.map(v => v / 100)
 
-    // Retain/release only paused upstream's sampler per consumer — ours
-    // samples on its own 2 s timer, always
+    // Retain/release forwards to Vitals — the shared 2 s /proc probe is
+    // demand-gated, so a widget mount is what keeps it (and the history
+    // buffers behind cpuHist/memHist) alive.
     function retainSystem() {
-        // no-op
+        Services.Vitals.retain()
     }
 
     function releaseSystem() {
-        // no-op
+        Services.Vitals.release()
     }
 
     // Histories we don't collect: empty keeps every consumer well-formed

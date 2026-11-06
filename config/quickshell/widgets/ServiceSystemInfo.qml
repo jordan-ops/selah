@@ -53,9 +53,15 @@ Singleton {
     property var _prevCores: []
     property int _refCount: 0
 
-    function retain() { _refCount++ }
+    function retain() {
+        _refCount++
+        Services.Vitals.retain()   // aggregates come from the gated probe
+    }
     function release() {
-        if (_refCount > 0) _refCount--
+        if (_refCount > 0) {
+            _refCount--
+            Services.Vitals.release()
+        }
     }
 
     // upstream copies — the graph window maths must agree with what the

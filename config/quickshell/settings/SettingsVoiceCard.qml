@@ -46,10 +46,12 @@ Item {
     }
     Component.onCompleted: refreshCheck()
 
-    // cheap probe — the audio page is the only place this card exists,
-    // so the timer costs nothing anywhere else
+    // cheap probe — but gated on the window too: the card outlives a
+    // closed settings (pageEntries doesn't reset on close), so without
+    // this the 3 s check keeps spawning after one visit to Audio.
     Timer {
-        interval: 3000; repeat: true; running: !root.installing
+        interval: 3000; repeat: true
+        running: Services.SettingsApp.open && !root.installing
         onTriggered: root.refreshCheck()
     }
 

@@ -99,6 +99,26 @@ Singleton {
         root.memHist = root.memHist.concat(root.mem).slice(-300)
     }
 
+    // ── demand gating ──────────────────────────────────────────────
+    // hyprdots' watcher pattern (Weather/Cava/Sys): the 2 s /proc probe
+    // only runs while something is actually displaying it — control
+    // center open, or a widget that retained the service. Idle cost goes
+    // from one `sh -c cat /proc/...` spawn every 2 s to zero; consumers
+    // call retain()/release() on mount/unmount or visibility, exactly
+    // like ServiceSystemInfo's refcount.
+    property int watchers: 0
+
+    function retain() { root.watchers++ }
+    function release() {
+        if (root.watchers > 0) root.watchers--
+    }
+
+    readonly property bool wanted: root.watchers > 0
+
+    // first consumer starts the probe immediately (no 2 s dead air on
+    // open); the rolling buffers fill from there
+    onWantedChanged: if (root.wanted) root.kick()
+
     function kick() {
         probe.running = false
         probe.running = true
@@ -106,10 +126,8 @@ Singleton {
 
     Timer {
         interval: 2000
-        running: true
+        running: root.wanted
         repeat: true
         onTriggered: root.kick()
     }
-
-    Component.onCompleted: kick()
 }

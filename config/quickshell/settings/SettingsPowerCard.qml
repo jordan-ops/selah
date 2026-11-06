@@ -101,7 +101,10 @@ Item {
         }
     }
 
-    Timer { interval: 10000; running: root.hasBat; repeat: true; onTriggered: root.read() }
+    // gated on the window as well as the battery: the card outlives a
+    // closed settings (pageEntries doesn't reset on close), so without
+    // this the 10 s upower read keeps spawning after one visit to Power
+    Timer { interval: 10000; running: Services.SettingsApp.open && root.hasBat; repeat: true; onTriggered: root.read() }
 
     Column {
         id: col

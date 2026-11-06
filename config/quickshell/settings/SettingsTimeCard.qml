@@ -49,7 +49,14 @@ Item {
         dateTxt = Qt.formatDate(d, "dddd, d MMMM yyyy")
     }
 
-    Timer { interval: 1000; running: true; repeat: true; onTriggered: root.tick() }
+    // gated on the window (the card outlives a closed settings) —
+    // triggeredOnStart re-reads the clock the instant it reopens so the
+    // display is never stale by a tick
+    Timer {
+        interval: 1000; repeat: true
+        running: Services.SettingsApp.open; triggeredOnStart: true
+        onTriggered: root.tick()
+    }
 
     Process {
         id: tzProc
