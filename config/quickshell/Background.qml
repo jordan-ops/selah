@@ -42,12 +42,27 @@ Variants {
             return path !== "" ? "file://" + path : ""
         }
 
-        // base = the wallpaper. `previous` sits on top while the service's
-        // crossfade pulls its opacity down to reveal the new base — far
-        // fewer moving parts than the original's diagonal Shape mask +
-        // MultiEffect reveal, same feel; our colors already live-update
-        // separately via Colors.qml so there's no theme/background
-        // choreography to keep in lockstep here.
+        // swipe transition — a thin rect sweeps across the screen,
+        // animating from left to right over the crossfade duration.
+        // it uses the new theme's accent color so the effect is visible
+        // even before the wallpaper fully resolves.
+        Rectangle {
+            id: swipeRect
+            anchors.fill: parent
+            anchors.topMargin: 0
+            anchors.bottomMargin: 0
+            width: 6
+            color: Services.Colors.accent
+            Behavior on x {
+                NumberAnimation {
+                    duration: Motion.medium3
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Motion.standardCurve
+                    from: -width
+                    to: parent.width
+                }
+            }
+        }
         Image {
             id: baseImage
             anchors.fill: parent
