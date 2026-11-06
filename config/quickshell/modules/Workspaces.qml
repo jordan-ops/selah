@@ -16,7 +16,7 @@ import "../services"
 // Click switches — Hyprland workspace dispatch, mango `view,<tag>,0`.
 Row {
     id: root
-    spacing: 8
+    spacing: 4
 
     readonly property bool mangoMode: Compositor.isMango
 
@@ -65,15 +65,13 @@ Row {
 
     Repeater {
         model: root.items
-        // spacing: 2  // QML engine – natural gap via delegate width
-        // delegate width 16 gives ~5px gap between 6px dots center-to-center
         // spacing: 2  // removed – QML engine does not expose this property
         // natural gap achieved via delegate width + content
 
         delegate: Item {
             id: wrap
-            width: 14
-            height: 18
+            width: 12
+            height: 16
             required property var modelData
             readonly property bool isActive: modelData.active
             readonly property bool isUrgent: modelData.urgent
