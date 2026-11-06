@@ -65,11 +65,15 @@ Row {
 
     Repeater {
         model: root.items
+        // spacing: 2  // QML engine – natural gap via delegate width
+        // delegate width 16 gives ~5px gap between 6px dots center-to-center
+        // spacing: 2  // removed – QML engine does not expose this property
+        // natural gap achieved via delegate width + content
 
         delegate: Item {
             id: wrap
-            width: 18
-            height: 26
+            width: 14
+            height: 18
             required property var modelData
             readonly property bool isActive: modelData.active
             readonly property bool isUrgent: modelData.urgent
@@ -77,9 +81,9 @@ Row {
             // glow behind the active workspace — larger translucent
             // accent rect, sits behind the box so it bleeds slightly
             Rectangle {
-                width: 12
-                height: 20
-                radius: 6
+                width: 10
+                height: 14
+                radius: 4
                 color: isActive
                     ? Qt.rgba(Colors.accent.r, Colors.accent.g, Colors.accent.b, 0.30)
                     : "transparent"
@@ -91,9 +95,9 @@ Row {
             // size so the strip never churns as workspaces activate
             Rectangle {
                 id: dot
-                width: 8
-                height: 18
-                radius: 4
+                width: 6
+                height: 12
+                radius: 3
                 color: isUrgent && !isActive ? Colors.critical
                     : isActive ? Colors.accent
                     : modelData.occupied ? Qt.rgba(Colors.accent.r, Colors.accent.g, Colors.accent.b, 0.22)
