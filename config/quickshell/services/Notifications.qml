@@ -82,6 +82,15 @@ Singleton {
         return keys
     }
 
+    // app names whose notifications are silently dropped — no pill popup,
+    // no history entry. Managed from Settings ▸ Notifications.
+    function isMuted(app) {
+        const v = Settings.values["notifications.muted"]
+        if (!Array.isArray(v)) return false
+        const name = appName(app)
+        return v.some(x => String(x).trim().toLowerCase() === name.toLowerCase())
+    }
+
     // take a notification out of the center's log. Runs BEFORE dismiss()
     // so no delegate is left mid-read of an object we just closed.
     function removeHistory(n) {
@@ -118,6 +127,8 @@ Singleton {
         keepOnReload: false   // don't resurrect old notifications every time we reload quickshell during dev
 
         onNotification: function(notification) {
+            // muted apps are silently dropped — no pill, no history
+            if (root.isMuted(notification)) return
             notification.tracked = true   // must set this, or it's discarded immediately
             // drop it from the center (and let the pill know) the instant
             // quickshell closes it — runs BEFORE the delete, so the rows'

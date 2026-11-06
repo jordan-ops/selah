@@ -429,6 +429,80 @@ Rectangle {
                 }
             }
 
+            // weather — same wttr.in reading as the clock card's strip,
+            // shown here as a compact chip: glyph + temp + condition.
+            // Clicking refreshes; right-click opens the forecast in the
+            // browser (wttr.in renders a nice ANSI page).
+            Rectangle {
+                width: parent.width
+                height: 56
+                radius: 10
+                color: Services.Colors.surface
+                border.color: Services.Colors.low
+                border.width: 1
+
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 10
+
+                    Text {
+                        font.family: Services.Fonts.family
+                        text: Services.Weather.glyph
+                        font.pixelSize: 24
+                        color: Services.Colors.text
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Column {
+                        spacing: 2
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: Services.Weather.ok
+                                ? Math.round(Services.Weather.tempNum) + "°"
+                                : "—"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Services.Colors.text
+                        }
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: Services.Weather.ok
+                                ? Services.Weather.desc
+                                : "Loading…"
+                            font.pixelSize: 11
+                            color: Services.Colors.textMuted
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Item { width: 0; height: 0 }
+
+                    Text {
+                        font.family: Services.Fonts.family
+                        text: Services.Weather.fetching ? "⟳" : "↻"
+                        font.pixelSize: 13
+                        color: Services.Colors.accent
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton)
+                                    Quickshell.execDetached(["xdg-open", "https://wttr.in/"])
+                                else
+                                    Services.Weather.refresh()
+                            }
+                        }
+                    }
+                }
+            }
+
         }
 
         // ---------------- SEPARATOR ----------------
@@ -445,6 +519,125 @@ Rectangle {
             width: parent.width - leftColumn.width - 1 - parent.spacing * 2
             height: parent.height
             spacing: 10
+
+            // media — compact row showing the current track with artwork,
+            // play/pause and skip. Tapping opens the full media card in
+            // the bar pill; clicking artwork does the same.
+            Rectangle {
+                width: parent.width
+                height: 64
+                radius: 10
+                color: Services.Colors.surface
+                border.color: Services.Colors.low
+                border.width: 1
+
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 10
+
+                    // artwork with rounded corners — Image has no radius,
+                    // so clip via a Rectangle wrapper
+                    Rectangle {
+                        width: 48
+                        height: 48
+                        radius: 8
+                        clip: true
+                        color: "transparent"
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Image {
+                            id: ccArt
+                            anchors.fill: parent
+                            source: Services.Media.artUrl !== "" ? Services.Media.artUrl : Services.Media.appIconSource
+                            fillMode: Image.PreserveAspectFit
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Services.Media.toggle()
+                        }
+                    }
+
+                    Column {
+                        spacing: 2
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: Services.Media.title
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: Services.Colors.text
+                            elide: Text.ElideRight
+                            width: 160
+                        }
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: Services.Media.artist
+                            font.pixelSize: 10
+                            color: Services.Colors.textMuted
+                            elide: Text.ElideRight
+                            width: 160
+                        }
+                    }
+
+                    Item { width: 0; height: 0 }
+
+                    Row {
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: "⏮"
+                            font.pixelSize: 14
+                            color: Services.Media.hasPlayer ? Services.Colors.text : Services.Colors.textMuted
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                enabled: Services.Media.hasPlayer
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Services.Media.previous()
+                            }
+                        }
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: Services.Media.playing ? "⏸" : "▶"
+                            font.pixelSize: 16
+                            color: Services.Media.hasPlayer ? Services.Colors.accent : Services.Colors.textMuted
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                enabled: Services.Media.hasPlayer
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Services.Media.togglePlay()
+                            }
+                        }
+
+                        Text {
+                            font.family: Services.Fonts.family
+                            text: "⏭"
+                            font.pixelSize: 14
+                            color: Services.Media.hasPlayer ? Services.Colors.text : Services.Colors.textMuted
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                enabled: Services.Media.hasPlayer
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Services.Media.next()
+                            }
+                        }
+                    }
+                }
+            }
 
             // system vitals — CPU/RAM sparklines + live net rates
             // (Services.Vitals samples /proc every 2s, 10min buffers)

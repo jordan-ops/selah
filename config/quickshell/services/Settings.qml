@@ -50,6 +50,14 @@ Singleton {
         // install shows nothing yet (every show* family key is unset =
         // off) but the studio and quick-add are reachable immediately
         "widgets.showWidgets": true,
+        // recently launched items from the launcher — newest first, capped
+        // at 12. Written by Launcher.launch(), read back to surface a
+        // "Recent" section when the pill opens with an empty query.
+        "launcher.recent": [],
+        // app names whose notifications never pop the pill or enter the
+        // center — they still arrive server-side but are silently dropped
+        // by quickshell (off by default, managed from Settings ▸ Notifications)
+        "notifications.muted": []
     })
 
     // typed accessor for keys the shell binds on — one line per new key

@@ -129,6 +129,13 @@ Singleton {
         })
     }
 
+    // recently launched items, newest first — read straight from the
+    // settings store (Launcher.launch() appends to it)
+    function recentItems() {
+        const v = Settings.values["launcher.recent"]
+        return Array.isArray(v) ? v : []
+    }
+
     // deletion (model churn) can shrink the list under the selection just
     // as easily — keep the index inside the model so the pill always has a
     // row to land on
@@ -245,6 +252,30 @@ Singleton {
             || a.name.localeCompare(b.name))
         .slice(0, q === "" ? 50 : 40)
 
+    // empty query → "Recent" section first (newest launched items), then
+    // the app list; a typed query shows only apps
+    if (q === "") {
+        const recent = root.recentItems()
+        const recentRows = recent.map(id => {
+            const d = DesktopEntries.applications.values.find(e => e.id === id)
+            if (!d) return null
+            return {
+                name: d.name,
+                comment: d.comment || "Recently used",
+                icon: "",
+                execute: () => root.launch(d)
+            }
+        }).filter(Boolean)
+        if (calcValue !== "" && calcExpr === q)
+            return [{
+                name: "= " + calcValue,
+                comment: "calculated — Enter copies the answer",
+                icon: "accessories-calculator",
+                execute: () => Quickshell.execDetached(["wl-copy", calcValue])
+            }, ...recentRows, ...apps]
+        return [...recentRows, ...apps]
+    }
+
     if (calcValue !== "" && calcExpr === q)
         return [{
             name: "= " + calcValue,
@@ -252,6 +283,19 @@ Singleton {
             icon: "accessories-calculator",
             execute: () => Quickshell.execDetached(["wl-copy", calcValue])
         }, ...apps]
+
+    // plain query with no app match — offer a web search instead of an
+    // empty pill. Opens the default browser with the query as a search URL.
+    if (q !== "" && apps.length === 0)
+        return [{
+            name: "Search the web for \"" + q + "\"",
+            comment: "Open in your default browser",
+            icon: "internet-web-browser",
+            execute: () => {
+                closeLauncher()
+                Quickshell.execDetached(["xdg-open", "https://www.google.com/search?q=" + encodeURIComponent(q)])
+            }
+        }]
 
     return apps
 }
@@ -289,6 +333,14 @@ Singleton {
     // the title (same reason rules.lua matches "Uninstall.*" by title).
     function launch(e) {
         if (e == null) return
+        // track in "recent" — newest first, no duplicates, cap at 12
+        const id = e.id || e.name || ""
+        if (id !== "") {
+            const recent = root.recentItems().filter(x => x !== id)
+            recent.unshift(id)
+            if (recent.length > 12) recent.length = 12
+            Settings.set("launcher.recent", recent)
+        }
         const inTerminal = e.runInTerminal === true
             && e.command && e.command.length > 0
         if (!inTerminal) {

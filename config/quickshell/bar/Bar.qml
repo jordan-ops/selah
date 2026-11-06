@@ -1182,6 +1182,35 @@ Variants {
                     color: Services.Colors.accent
                     text: pill.currentNotification ? pill.currentNotification.body : ""
                 }
+
+                // action chips — one per labelled action on the notification
+                // (e.g. "Reply", "Mark read"). Clicking a chip runs that
+                // action and morphs the pill back; the row itself already
+                // runs the default action, so chips are the extras.
+                Row {
+                    width: parent.width
+                    spacing: 6
+                    visible: pill.currentNotification && Services.Notifications.chipsFor(pill.currentNotification).length > 0
+                    Repeater {
+                        model: Services.Notifications.chipsFor(pill.currentNotification)
+                        delegate: Text {
+                            font.family: Services.Fonts.family
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: Services.Colors.accent
+                            text: modelData.text
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    modelData.invoke()
+                                    pill.notifVisible = false
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // clicking the notification message runs its default action —
