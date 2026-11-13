@@ -18,14 +18,27 @@ Item {
     property alias leftRow: leftRow
     property alias rightGroup: rightGroup
     property alias workspacesItem: workspacesItem
+    property alias minimalClock: minimalClock
     anchors.fill: parent
-    opacity: pill.mode === "rest" ? 1 : 0
+    // "minimal" joins "rest": the clock-only capsule is still resting
+    // content — it just draws far less of it (see minimalClock below).
+    opacity: (pill.mode === "rest" || pill.mode === "minimal") ? 1 : 0
     // opacity alone does NOT gate input in Qt Quick -- an
     // invisible item still takes clicks. The `|| opacity > 0.01`
     // tail keeps the fade-out animating; the condition half is
     // what makes it live on frame 1 (search fields need focus).
-    visible: (pill.mode === "rest") || opacity > 0.01
+    visible: (pill.mode === "rest" || pill.mode === "minimal") || opacity > 0.01
     Behavior on opacity { NumberAnimation { duration: Services.Motion.effectsFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+    // ----- minimal pill: ONLY the clock -----
+    // Everything else (workspaces, tray, media, battery, wifi) is
+    // hidden while pill.mode === "minimal". This Clock is the sole
+    // content of the 30px capsule.
+    Clock {
+        id: minimalClock
+        anchors.centerIn: parent
+        visible: pill.mode === "minimal"
+    }
 
     // ----- compact capsule (restStyle "compact", collapsed) -----
     // time · workspace dots · battery % — the pill hugs this row
@@ -43,7 +56,7 @@ Item {
         // segmented row swap places while the pill springs,
         // so both sides fade through each other
         opacity: pill.compactAtRest() ? 1 : 0
-        visible: opacity > 0.01
+        visible: pill.mode !== "minimal" && opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {
@@ -113,7 +126,7 @@ Item {
         radius: height / 2
         color: Services.Colors.surface
         opacity: !pill.compactAtRest() ? 1 : 0
-        visible: opacity > 0.01
+        visible: pill.mode !== "minimal" && opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {
@@ -154,7 +167,7 @@ Item {
         id: workspacesItem
         anchors.centerIn: parent
         opacity: !pill.compactAtRest() ? 1 : 0
-        visible: opacity > 0.01
+        visible: pill.mode !== "minimal" && opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {
@@ -176,7 +189,7 @@ Item {
         spacing: 10
         // crossfade with the compact capsule — see compactRow
         opacity: !pill.compactAtRest() ? 1 : 0
-        visible: opacity > 0.01
+        visible: pill.mode !== "minimal" && opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {
@@ -274,6 +287,8 @@ Item {
         radius: 13
         color: trayArea.containsMouse || trayChip.expanded
             ? Services.Colors.surfaceAlt : Services.Colors.surface
+        // hidden in minimal mode — the clock-only capsule has no tray
+        visible: pill.mode !== "minimal"
         // ALWAYS visible. It used to be gated on
         // SystemTray.items.values.length > 0, and this machine has
         // no tray applet installed at all (nm-applet, blueman-applet,

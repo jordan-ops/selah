@@ -269,8 +269,11 @@ Singleton {
         }, {
             "value": "wide",
             "label": "Full row"
+        }, {
+            "value": "minimal",
+            "label": "Minimal (clock only)"
         }],
-        "keywords": "bar pill rest compact wide capsule idle hover expand"
+        "keywords": "bar pill rest compact wide minimal capsule idle hover expand clock"
     }, {
         "id": "batteryText",
         "page": "display",

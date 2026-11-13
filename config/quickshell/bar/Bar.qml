@@ -434,6 +434,16 @@ Variants {
                 acceptedButtons: Qt.LeftButton
 
                 onContainsMouseChanged: {
+                    // In minimal mode, hovering expands the pill back to
+                    // the full rest content; leaving collapses it again.
+                    const isMinimal = Services.Settings.minimalPill
+                        || Services.Settings.barRestStyle === "minimal"
+                    if (isMinimal && pill.mode === "minimal") {
+                        pill.restExpanded = containsMouse
+                        if (!containsMouse) collapseTimer.start()
+                        else collapseTimer.stop()
+                        return
+                    }
                     // hover does NOT morph the pill into the full segmented
                     // row any more, and it no longer touches the tray — the
                     // arrow owns that now. restExpanded stays click-only.
@@ -454,7 +464,11 @@ Variants {
                 interval: 350
                 // guard: a click restarts this while the pointer is still on
                 // the bar — don't collapse the pinned row under a live hover
-                onTriggered: if (!hoverArea.containsMouse) pill.restExpanded = false
+                onTriggered: {
+                    if (!hoverArea.containsMouse) {
+                        pill.restExpanded = false
+                    }
+                }
             }
 
             Timer {
@@ -476,6 +490,14 @@ Variants {
             // screen — it scrolls past that instead. Both the pill's target
             // height (below) and the actual ListView height read this same
             // function, so they can't drift apart like width/height used to.
+            function pinnedGridHeight() {
+                const n = Services.Launcher.pinnedResults.length
+                if (n === 0) return 0
+                const perRow = Math.max(1, Math.floor((pill.width - 24) / 68))
+                const rows = Math.ceil(n / perRow)
+                return rows * 56 + (rows - 1) * 12
+            }
+
             function launcherListHeight() {
                 const n = Math.min(Services.Launcher.results.length, 6)
                 return n > 0 ? n * 44 : 40   // 40 = height of the "No results" line
@@ -523,8 +545,11 @@ Variants {
             }
 
             // restStyle "compact" AND not hover-expanded = the tiny capsule
+            // "minimal" restStyle always uses the compact capsule path
+            // (the mode property routes it to "minimal" mode separately)
             function compactAtRest() {
-                return Services.Settings.barRestStyle === "compact" && !restExpanded
+                const rs = Services.Settings.barRestStyle
+                return (rs === "compact" || rs === "minimal") && !restExpanded
             }
 
             // Room reserved for the system-tray chip at the pill's right
@@ -576,6 +601,7 @@ Variants {
                 : pill.osdVisible ? "osd"
                 : pill.notifVisible ? "notif"
                 : toplevel.ownsOverlay(Services.PowerMenu) ? "power"
+                : (Services.Settings.minimalPill || Services.Settings.barRestStyle === "minimal") && !restExpanded ? "minimal"
                 : "rest"
 
             // lookup table: mode -> target size. Adding a new pill state
@@ -591,7 +617,11 @@ Variants {
                 // follows the content column (+20px margins top/bottom) —
                 // same live-content-size trick as "notif"
                 polkit:       () => Qt.size(400, polkitCol.implicitHeight + 40),
-                launcher:     () => Qt.size(360, 12 + 30 + 8 + pill.confirmOverlayHeight() + 12),
+                launcher:     () => {
+                    const gridH = pill.pinnedGridHeight()
+                    const gridGap = gridH > 0 ? 8 : 0
+                    return Qt.size(360, 12 + 30 + 8 + gridH + gridGap + pill.confirmOverlayHeight() + 12)
+                },
                 theme:        () => Qt.size(Services.Themes.geom.pillW, 24 + pill.themeGridHeight()),
                 wallpaper:    () => Qt.size(Services.Themes.geom.pillW, 24 + pill.wallpaperStripHeight()),
                 controlcenter:() => Qt.size(760, 440),
@@ -614,7 +644,8 @@ Variants {
                 // side + 20px top/bottom (the media card's margins).
                 // recording: 340 tall for the added Compress section.
                 recording:    () => Qt.size(308, 380),
-                updates:      () => Qt.size(328, 420)
+                updates:      () => Qt.size(328, 420),
+                minimal:    () => Qt.size(statusBar.minimalClock.implicitWidth + 32, 30),
             })
 
             readonly property size targetSize: (modes[mode] || modes.rest)()
@@ -1361,6 +1392,75 @@ Variants {
                         : Services.Launcher.query.trim().startsWith(":")
                         ? "No emoji match"
                         : "No apps match"
+                }
+
+                // Pinned favorites + recent — icon-only grid, no text.
+                // Shows only when the query is empty; the regular results
+                // list below carries the full app list.
+                Flow {
+                    id: pinnedGrid
+                    width: parent.width
+                    visible: Services.Launcher.pinnedResults.length > 0
+                    spacing: 12
+
+                    Repeater {
+                        model: Services.Launcher.pinnedResults
+
+                        delegate: Item {
+                            width: 56
+                            height: 56
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: pinnedArea.containsMouse
+                                    ? Services.Colors.surfaceAlt
+                                    : Services.Colors.surface
+                                Behavior on color {
+                                    ColorAnimation { duration: Services.Motion.effectsFast }
+                                }
+
+                                IconImage {
+                                    anchors.centerIn: parent
+                                    implicitSize: 32
+                                    source: modelData.icon !== ""
+                                        ? Quickshell.iconPath(modelData.icon, true) : ""
+                                }
+                            }
+
+                            MouseArea {
+                                id: pinnedArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    modelData.execute()
+                                    Services.Launcher.closeLauncher()
+                                }
+                            }
+
+                            // tooltip on hover
+                            Rectangle {
+                                anchors.top: parent.bottom
+                                anchors.topMargin: 4
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: tipText.implicitWidth + 12
+                                height: 22
+                                radius: 6
+                                color: Services.Colors.surfaceAlt
+                                visible: pinnedArea.containsMouse
+
+                                Text {
+                                    id: tipText
+                                    anchors.centerIn: parent
+                                    font.family: Services.Fonts.family
+                                    font.pixelSize: 11
+                                    color: Services.Colors.text
+                                    text: modelData.name
+                                }
+                            }
+                        }
+                    }
                 }
 
                 ListView {

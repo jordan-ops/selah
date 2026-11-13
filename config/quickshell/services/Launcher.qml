@@ -202,6 +202,55 @@ Singleton {
 
     // ">" scopes the search to the settings CATALOG ONLY — the catalog
     // used to sit above every app hit, which buried apps under settings
+    // Pinned favorites + recent apps — shown as an icon-only grid when
+    // the query is empty, ABOVE the regular results list. Tagged with
+    // `pinned: true` so Bar.qml's delegate can render them as bare icons.
+    readonly property var pinnedResults: {
+        const q = query.trim().toLowerCase()
+        if (q !== "") return []
+
+        const favIds = strList("launcher.fav")
+        const favRows = favIds.map(id => {
+            const d = DesktopEntries.applications.values.find(e =>
+                (e.id || "").toLowerCase() === id.toLowerCase() ||
+                (e.name || "").toLowerCase() === id.toLowerCase())
+            if (!d) return null
+            let icon = d.icon || ""
+            if (!icon) {
+                const lower = (d.name || "").toLowerCase()
+                const iconMap = { "firefox":"firefox","kitty":"kitty","google-chrome":"chrome",
+                    "terminal":"terminal","code":"code","settings":"settings","file":"filemanager",
+                    "thunar":"filemanager","nvim":"neovim","code-oss":"code","whatsapp":"whatsapp",
+                    "discord":"discord","telegram":"telegram","spotify":"spotify","slack":"slack",
+                    "teams":"teams","zoom":"zoom","steam":"steam","org.telegram.desktop":"telegram" }
+                icon = iconMap[lower] || d.id || ""
+            }
+            return { name: d.name, icon: icon, pinned: true,
+                execute: () => root.launch(d) }
+        }).filter(Boolean)
+
+        const recent = root.recentItems()
+        const recentRows = recent.map(id => {
+            const d = DesktopEntries.applications.values.find(e => e.id === id)
+            if (!d) return null
+            if (favIds.some(f => f.toLowerCase() === id.toLowerCase())) return null
+            let icon = d.icon || ""
+            if (!icon) {
+                const lower = (d.name || "").toLowerCase()
+                const iconMap = { "firefox":"firefox","kitty":"kitty","google-chrome":"chrome",
+                    "terminal":"terminal","code":"code","settings":"settings","file":"filemanager",
+                    "thunar":"filemanager","nvim":"neovim","code-oss":"code","whatsapp":"whatsapp",
+                    "discord":"discord","telegram":"telegram","spotify":"spotify","slack":"slack",
+                    "teams":"teams","zoom":"zoom","steam":"steam","org.telegram.desktop":"telegram" }
+                icon = iconMap[lower] || d.id || ""
+            }
+            return { name: d.name, icon: icon, pinned: true,
+                execute: () => root.launch(d) }
+        }).filter(Boolean)
+
+        return [...favRows, ...recentRows]
+    }
+
     // rows on every keystroke. Bare ">" browses the whole catalog (first
     // 20 rows); a plain query never shows settings at all anymore.
     readonly property var results: {
@@ -252,28 +301,17 @@ Singleton {
             || a.name.localeCompare(b.name))
         .slice(0, q === "" ? 50 : 40)
 
-    // empty query → "Recent" section first (newest launched items), then
-    // the app list; a typed query shows only apps
+    // Empty query: fav/recent are rendered separately as the pinned icon
+    // grid (pinnedResults above), so `results` only carries apps + calc.
     if (q === "") {
-        const recent = root.recentItems()
-        const recentRows = recent.map(id => {
-            const d = DesktopEntries.applications.values.find(e => e.id === id)
-            if (!d) return null
-            return {
-                name: d.name,
-                comment: d.comment || "Recently used",
-                icon: "",
-                execute: () => root.launch(d)
-            }
-        }).filter(Boolean)
         if (calcValue !== "" && calcExpr === q)
             return [{
                 name: "= " + calcValue,
                 comment: "calculated — Enter copies the answer",
                 icon: "accessories-calculator",
                 execute: () => Quickshell.execDetached(["wl-copy", calcValue])
-            }, ...recentRows, ...apps]
-        return [...recentRows, ...apps]
+            }, ...apps]
+        return apps
     }
 
     if (calcValue !== "" && calcExpr === q)

@@ -55,7 +55,8 @@ ShellRoot{
     FlipClock{}      // flip clock screensaver — idle / `qs ipc call screensaver launch` (style: flip)
     AetherPicker{}   // aether wallpaper/palette overlay — qs ipc call aether toggle
     RepoUpdatePopup{}   // "a new deploy is ready" dialog — qs ipc call updates status
-    ThemeFlip{}      // frozen-frame theme-switch reveal — qs ipc call themeflip test
+    // ThemeFlip disabled: its fullscreen frozen-frame overlay read as a blank
+    // panel during switches. File kept for reference; re-add here to restore.
     CheatSheet{}     // keybinding cheat sheet — qs ipc call cheatsheet toggle (SUPER + /)
     Overview{}       // layout overview / floor-plan — qs ipc call overview toggle (SUPER + TAB)
     // Polkit prompt merged into the bar (pill "polkit" mode in Bar.qml,

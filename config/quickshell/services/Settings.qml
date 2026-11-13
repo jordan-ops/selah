@@ -57,11 +57,26 @@ Singleton {
         // app names whose notifications never pop the pill or enter the
         // center — they still arrive server-side but are silently dropped
         // by quickshell (off by default, managed from Settings ▸ Notifications)
-        "notifications.muted": []
+        "notifications.muted": [],
+        // pinned favorite apps shown in the launcher when the query is
+        // empty, above the Recent section.
+        // qs ipc call settings set launcher.fav '["firefox","kitty"]'
+        "launcher.fav": [],
+        // launcher display: false = list (default), true = icon grid
+        // qs ipc call settings set launcher.gridMode true
+        "launcher.gridMode": false,
+        // minimal pill: when true the resting bar collapses to a tiny
+        // capsule that shows ONLY the clock — no workspaces, tray, media,
+        // battery, or activity chips. 30px tall.
+        // qs ipc call settings set minimalPill true
+        "minimalPill": false
     })
 
     // typed accessor for keys the shell binds on — one line per new key
-    readonly property string barRestStyle: values["bar.restStyle"] || "compact"
+    readonly property string barRestStyle: {
+        const v = values["bar.restStyle"] || "compact"
+        return ["compact", "wide", "minimal"].indexOf(v) >= 0 ? v : "compact"
+    }
     // Suspended pill variant: the capsule hovers just below the screen
     // edge instead of sitting flush on it. Settings ▸ Bar ▸ Floating
     // pill, or `qs ipc call settings set bar.floating true`.
@@ -75,6 +90,14 @@ Singleton {
     // number in the gap, in the Control Center)
     readonly property bool barBatteryText:
         values["bar.batteryText"] === true || values["bar.batteryText"] === "true"
+    // pinned favorites in the launcher (empty query) — array of app IDs
+    readonly property var launcherFav: values["launcher.fav"] || []
+    // launcher grid view instead of list
+    readonly property bool launcherGridMode:
+        values["launcher.gridMode"] === true || values["launcher.gridMode"] === "true"
+    // minimal pill mode — clock-only resting bar
+    readonly property bool minimalPill:
+        values["minimalPill"] === true || values["minimalPill"] === "true"
     // the capsule's alert chime (Bar.qml) — off means the flash still
     // happens, just silently
     readonly property bool effectsTone:
