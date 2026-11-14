@@ -76,26 +76,15 @@ Variants {
         WlrLayershell.layer: (pill.osdVisible || pill.notifVisible || Services.Launcher.open || Services.Themes.open || Services.Wallpapers.open || Services.ControlCenter.open || Services.ClockCard.open || Services.Clipboard.open || Services.PowerMenu.open || Services.SettingsApp.open || Services.Polkit.open || Services.Media.open || Services.Updates.open || Services.ScreenRecording.open) ? WlrLayer.Overlay : WlrLayer.Top
         anchors{ top: true; left:true; right:true}
 
-        // Surface sized to the content that is actually drawn — the
-        // window keeps the small size it adopted when the old fixed
-        // 1920x560 slab was retired (a fixed height made every morph
-        // resize-free but painted a huge surface; height now follows the
-        // pill's *target* size, not its animated height, so a morph
-        // still doesn't resize the surface on every spring frame).
-        //
-        // It is TRANSPARENT, not opaque: the floating pill shows the
-        // wallpaper in the gap above the capsule and around it, and an
-        // opaque background-colour fill paints over that gap — which is
-        // exactly how the floating look got lost. (A Nov-2 change made
-        // the window opaque after an XRGB8888/no-alpha trace, but the
-        // transparent selah bar rendered correctly on this same machine
-        // on Nov-5 — see `color` below.)
-        //
-        // `mask` keeps input confined to the pill + activity chips;
-        // everything else in the window is click-through.
-        readonly property real surfaceHeight: pill.targetSize.height
-            + (trayPopup.popShown ? 4 + trayCard.height : 0)
-        implicitHeight: toplevel.floatGap + surfaceHeight
+        // FIXED window height = the tallest size any pill mode can reach
+        // (the old dynamic `surfaceHeight` bound made the surface resize on
+        // EVERY spring frame — hyprctl measured 54 -> 346 -> 54 frame by
+        // frame during a launcher open — and a per-frame surface resize is
+        // precisely what made morphs choppy: Qt/compositor scales the
+        // in-flight frame to the new size, which is where the visible
+        // "text and icons stretch" came from). The pill now springs inside
+        // a static surface: nothing resizes, nothing gets scaled.
+        implicitHeight: 560
         // True while one of the pill's modal panels owns the screen. The
         // pill's modes are exclusive (each panel's openPanel() closes the
         // others), so at most one is ever set — this just means "a panel is
@@ -318,8 +307,9 @@ Variants {
 
             // compact rest capsule: expands on hover (or click) into the
             // full segmented row. Collapse waits for the grace timer, so a
-            // fast cursor crossing never flickers it — popup modes are
-            // unaffected (each has its own target size).
+            // fast cursor crossing never flickers it — the minimal style
+            // waits out the longer minimalCollapse (1s) instead — popup
+            // modes are unaffected (each has its own target size).
             property bool restExpanded: false
 
             // Escape closes the paste window even when focus is not sitting
@@ -432,30 +422,45 @@ Variants {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
+                // minimal rest style: the clock-only capsule that hover-
+                // expands back to the full row (shared by the hover and
+                // click handlers below so they can't drift apart)
+                readonly property bool minimalRest: Services.Settings.minimalPill
+                    || Services.Settings.barRestStyle === "minimal"
 
                 onContainsMouseChanged: {
+                    console.log("[hovertest] enter/leave containsMouse=" + containsMouse + " mode=" + pill.mode + " restExpanded=" + pill.restExpanded)
                     // In minimal mode, hovering expands the pill back to
-                    // the full rest content; leaving collapses it again.
-                    const isMinimal = Services.Settings.minimalPill
-                        || Services.Settings.barRestStyle === "minimal"
-                    if (isMinimal && pill.mode === "minimal") {
-                        pill.restExpanded = containsMouse
-                        if (!containsMouse) collapseTimer.start()
-                        else collapseTimer.stop()
+                    // the full rest content. Leaving does NOT collapse it
+                    // on the spot — every leave path arms a grace timer
+                    // (minimalCollapse below for the minimal style, the
+                    // short collapseTimer otherwise), so a cursor merely
+                    // crossing the bar never yanks the row down mid-gesture.
+                    if (minimalRest && containsMouse && pill.mode === "minimal") {
+                        pill.restExpanded = true
+                        minimalCollapse.stop()
+                        collapseTimer.stop()
                         return
                     }
                     // hover does NOT morph the pill into the full segmented
                     // row any more, and it no longer touches the tray — the
                     // arrow owns that now. restExpanded stays click-only.
-                    if (!containsMouse) collapseTimer.start()
-                    else collapseTimer.stop()
+                    if (containsMouse) {
+                        collapseTimer.stop()
+                        minimalCollapse.stop()
+                    } else if (minimalRest) {
+                        minimalCollapse.restart()
+                    } else {
+                        collapseTimer.start()
+                    }
                 }
                 onClicked: {
                     // clicking empty capsule area pins the full segmented row
                     // while the pointer is here; content children keep their
                     // own clicks
                     pill.restExpanded = true
-                    collapseTimer.restart()
+                    if (minimalRest) minimalCollapse.restart()
+                    else collapseTimer.restart()
                 }
             }
 
@@ -465,6 +470,21 @@ Variants {
                 // guard: a click restarts this while the pointer is still on
                 // the bar — don't collapse the pinned row under a live hover
                 onTriggered: {
+                    if (!hoverArea.containsMouse) {
+                        pill.restExpanded = false
+                    }
+                }
+            }
+
+            Timer {
+                id: minimalCollapse
+                // minimal pill's own collapse grace: the hover-expand is a
+                // hover-only affordance, so give the pointer a full second
+                // to come back (or act) before the row minimizes — 350ms
+                // here read as "collapses the instant I leave".
+                interval: 2500
+                onTriggered: {
+                    console.log("[hovertest] minimalCollapse fired, containsMouse=" + hoverArea.containsMouse)
                     if (!hoverArea.containsMouse) {
                         pill.restExpanded = false
                     }
@@ -1109,6 +1129,7 @@ Variants {
                             fillMode: Image.PreserveAspectCrop
                             smooth: true
                             asynchronous: true
+                            cache: true
                         }
 
                         Text {
@@ -1416,9 +1437,6 @@ Variants {
                                 color: pinnedArea.containsMouse
                                     ? Services.Colors.surfaceAlt
                                     : Services.Colors.surface
-                                Behavior on color {
-                                    ColorAnimation { duration: Services.Motion.effectsFast }
-                                }
 
                                 IconImage {
                                     anchors.centerIn: parent
@@ -1856,6 +1874,7 @@ Variants {
                                     fillMode: Image.PreserveAspectCrop
                                     smooth: true
                                     asynchronous: true
+                            cache: true
                                 }
 
                                 Text {
@@ -1906,6 +1925,7 @@ Variants {
                                             fillMode: Image.PreserveAspectFit
                                             smooth: true
                                             asynchronous: true
+                            cache: true
                                         }
 
                                         Text {
@@ -2041,13 +2061,6 @@ Variants {
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
                                                Services.Colors.text.b, prevMa.containsMouse ? 0.16 : 0.08)
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: Services.Motion.effectsFast
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                                    }
-                                }
                                 scale: prevMa.pressed ? 0.9 : 1
                                 Behavior on scale {
                                     SpringAnimation {
@@ -2115,13 +2128,6 @@ Variants {
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
                                                Services.Colors.text.b, nextMa.containsMouse ? 0.16 : 0.08)
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: Services.Motion.effectsFast
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.emphasizedDecelerate
-                                    }
-                                }
                                 scale: nextMa.pressed ? 0.9 : 1
                                 Behavior on scale {
                                     SpringAnimation {
@@ -2531,6 +2537,36 @@ Variants {
         // left: width grows from 0 while content is pulled left-to-right
         // under a clip, so each chip looks like it's drawn OUT of the bar;
         // when its condition clears it retracts back into the pill.
+    // --- media indicator: slides out of the pill's left edge ---
+    Item {
+        id: mediaChip
+        readonly property bool active: Services.Media.hasPlayer
+        height: 26
+        width: active ? mediaBody.width : 0
+        opacity: (pill.mode === "rest" || pill.mode === "minimal") && active ? 1 : 0
+        visible: opacity > 0.01
+        clip: true
+        anchors.right: pill.left
+        anchors.rightMargin: 8
+        anchors.verticalCenter: pill.verticalCenter
+
+        Behavior on width { SpringAnimation { spring: Services.Motion.spatialFastSpring; damping: Services.Motion.spatialFastDamping } }
+        Behavior on opacity { NumberAnimation { duration: Services.Motion.medium1; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+
+        Item {
+            id: mediaInner
+            height: parent.height
+            width: mediaBody.width
+            x: mediaChip.active ? 0 : mediaBody.width
+            Behavior on x { SpringAnimation { spring: Services.Motion.popSpring; damping: Services.Motion.popDamping } }
+
+            MediaVisualiser {
+                id: mediaBody
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
         Row {
             id: activityRow
             anchors.left: pill.right
@@ -2542,7 +2578,7 @@ Variants {
             // transient pill modes (launcher/cc/…) own the screen — the
             // chips only belong to the resting bar; fade them out with the
             // mode change instead of popping them off mid-morph
-            opacity: pill.mode === "rest" ? 1 : 0
+            opacity: (pill.mode === "rest" || pill.mode === "minimal") ? 1 : 0
             visible: opacity > 0.01
 
             Behavior on opacity {
@@ -2571,7 +2607,7 @@ Variants {
                     id: recInner
                     height: parent.height
                     width: recBody.width
-                    x: recChip.active ? 0 : -16
+                    x: recChip.active ? 0 : -recBody.width
                     Behavior on x { SpringAnimation { spring: Services.Motion.popSpring; damping: Services.Motion.popDamping } }
 
                     Rectangle {
@@ -2653,7 +2689,7 @@ Variants {
                     id: updatesInner
                     height: parent.height
                     width: updatesBody.width
-                    x: updatesChip.active ? 0 : -16
+                    x: updatesChip.active ? 0 : -updatesBody.width
                     Behavior on x { SpringAnimation { spring: Services.Motion.popSpring; damping: Services.Motion.popDamping } }
 
                     Rectangle {
@@ -2838,11 +2874,11 @@ Variants {
                     id: trayKillProc
                 }
 
-                // The bounce. Grows out of its own top edge — the edge that
+                // The reveal. Grows out of its own top edge — the edge that
                 // touches the bar — so it reads as emerging from the chevron
-                // rather than inflating in place. bounceSpring carries M3E's
-                // ~12% overshoot, which is the whole effect; opacity rides
-                // the effects token instead (M3: effects never overshoot).
+                // rather than inflating in place. bounceSpring lands it in
+                // ~217ms with no overshoot (2026-11 hyprdots retune); opacity
+                // rides the effects token instead (M3: effects never overshoot).
                 // No y-slide: the surface is exactly card-height, so any
                 // upward offset would clip the card against the top edge.
                 transformOrigin: Item.Top
@@ -2912,19 +2948,6 @@ Variants {
                                     : (trayIconArea.containsMouse
                                         ? Services.Colors.surfaceAlt
                                         : "transparent")
-                                // ColorAnimation, not NumberAnimation: the
-                                // rest value here is "transparent", and
-                                // NumberAnimation coerced it to #000000 —
-                                // which is why every tray icon sat on a solid
-                                // black 32px disc instead of an invisible plate
-                                // that only darkens on hover.
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: Services.Motion.effectsFast
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Services.Motion.standardCurve
-                                    }
-                                }
                             }
 
                             IconImage {

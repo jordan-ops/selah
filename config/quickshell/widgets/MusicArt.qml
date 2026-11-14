@@ -40,5 +40,6 @@ ClippingRectangle {
         sourceSize.height: root.decode
         asynchronous: true
         mipmap: true
+    cache: true
     }
 }

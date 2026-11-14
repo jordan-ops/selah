@@ -73,6 +73,7 @@ Item {
                     asynchronous: true
                     sourceSize.width: 640
                     visible: status === Image.Ready
+                cache: true
                 }
 
                 // theme palette stripes until generate-previews.sh has shot it

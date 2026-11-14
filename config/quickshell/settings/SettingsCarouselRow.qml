@@ -141,6 +141,7 @@ Item {
                         asynchronous: true
                         sourceSize.width: 800
                         visible: status === Image.Ready
+                    cache: true
                     }
                     FileView {
                         printErrors: false
@@ -322,6 +323,7 @@ Item {
                                     asynchronous: true
                                     sourceSize.width: 320
                                     visible: status === Image.Ready
+                                cache: true
                                 }
                                 // dim the neighbours so the current reads
                                 // as the selection (thaws on hover)

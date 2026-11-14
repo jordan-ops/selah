@@ -76,9 +76,12 @@ Item {
                 radius: 13
                 color: "transparent"
                 border.width: 2
-                border.color: Services.Colors.accent
-                opacity: cell.sel ? 0.9 : 0
-                Behavior on opacity { NumberAnimation { duration: 140 } }
+                border.color: cell.sel ? Services.Colors.accent
+                    : Qt.rgba(Services.Colors.low.r, Services.Colors.low.g,
+                              Services.Colors.low.b, hover.hovered ? 0.45 : 0.2)
+                Behavior on border.color { ColorAnimation { duration: 120 } }
+                // Drop shadow for selected state; subtle elevation on hover
+                Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
             }
 
             // Keep the selected card in view when it moves off-screen (arrow
@@ -98,11 +101,17 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 10
-                    color: Services.Colors.surface
-                    border.width: cell.sel ? 2 : 1
+                    // Surface elevation responds to hover and selection
+                    color: Qt.rgba(
+                        Services.Colors.surface.r + (cell.sel ? 0 : hover.hovered ? 2 : 0),
+                        Services.Colors.surface.g + (cell.sel ? 0 : hover.hovered ? 2 : 0),
+                        Services.Colors.surface.b + (cell.sel ? 0 : hover.hovered ? 2 : 0),
+                        1
+                    )
+                    border.width: cell.sel ? 2 : (hover.hovered ? 1.5 : 1)
                     border.color: cell.sel ? Services.Colors.accent
                         : Qt.rgba(Services.Colors.low.r, Services.Colors.low.g,
-                                  Services.Colors.low.b, hover.hovered ? 0.9 : 0.45)
+                                  Services.Colors.low.b, hover.hovered ? 0.55 : 0.45)
                     Behavior on border.color { ColorAnimation { duration: 120 } }
                     clip: true
 
@@ -118,7 +127,10 @@ Item {
                         // Cap the decode: these are 4–6 K wallpapers, and only
                         // the size actually drawn should ever be in memory.
                         sourceSize.width: cell.sel ? 640 : 360
+                    cache: true
                     }
+                    // Subtle press feedback
+                    Behavior on color { ColorAnimation { duration: 80 } }
 
                     // Position of this card in the loaded results, shown only
                     // on the selected one: the footer's "n / m" is too far
@@ -132,9 +144,11 @@ Item {
                         height: selT.implicitHeight + 8
                         width: selT.implicitWidth + 14
                         radius: 6
-                        color: Qt.rgba(0, 0, 0, 0.72)
+                        // Pulsed background on selection
+                        color: Qt.rgba(0, 0, 0, cell.sel ? 0.85 : 0.72)
                         border.width: 1
                         border.color: Services.Colors.accent
+                        Behavior on color { NumberAnimation { duration: 200 } }
                         Text {
                             id: selT
                             anchors.centerIn: parent
@@ -142,6 +156,13 @@ Item {
                             color: Services.Colors.accent
                             font.family: Services.Fonts.family
                             font.pixelSize: 11
+                            // Slight scale on selection
+                            transform: Scale {
+                                when: cell.sel
+                                from: 1
+                                to: 1.05
+                                easing.type: Easing.OutQuad
+                            }
                         }
                     }
 
@@ -155,7 +176,9 @@ Item {
                         height: badgeT.implicitHeight + 8
                         width: badgeT.implicitWidth + 14
                         radius: 6
-                        color: Qt.rgba(0, 0, 0, 0.62)
+                        // Subtle pulse on group badges
+                        color: Qt.rgba(0, 0, 0, cell.isGroup || cell.it && cell.it.sub !== "" ? 0.62 : 0)
+                        Behavior on color { NumberAnimation { duration: 200 } }
                         Text {
                             id: badgeT
                             anchors.centerIn: parent
@@ -173,7 +196,15 @@ Item {
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 30
-                        color: Services.Colors.surfaceAlt
+                        radius: 8
+                        // Elevated background on hover
+                        color: Qt.rgba(
+                            Services.Colors.surfaceAlt.r + (hover.hovered ? 3 : 0),
+                            Services.Colors.surfaceAlt.g + (hover.hovered ? 3 : 0),
+                            Services.Colors.surfaceAlt.b + (hover.hovered ? 3 : 0),
+                            1
+                        )
+                        Behavior on color { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
                         Text {
                             font.family: Services.Fonts.family
                             anchors.left: parent.left
@@ -194,7 +225,9 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    // A click only ever SELECTS — including a click on the
+                    pressedTemporary: true
+                    // Pressed state provides immediate feedback; release returns to
+                    // normal. A click only ever SELECTS — including a click on the
                     // card that is already selected. Acting used to need a
                     // second click on the same card, which read as "one
                     // click applies it": a search pre-selects the first

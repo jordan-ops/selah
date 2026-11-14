@@ -101,11 +101,14 @@ Item {
                     Repeater {
                         model: 8
                         Rectangle {
+                            id: swatchRect
                             width: 31; height: 22; radius: 3
                             color: root.swatchColor(index)
                             border.width: root.hotSwatch === index ? 2 : 1
                             border.color: root.hotSwatch === index
                                 ? Services.Colors.text : Services.Colors.low
+                            // Hover lift and press feedback
+                            Behavior on color { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
                             HoverHandler { onHoveredChanged: root.hotSwatch = hovered ? index : -1 }
                         }
                     }
@@ -140,9 +143,12 @@ Item {
                 }
                 Rectangle {   // preset chip: says loudly who owns the palette
                     visible: aether.presetActive
-                    height: 18; width: presetChipT.implicitWidth + 18
-                    radius: 5
-                    color: Services.Colors.accent
+                    height: 22; width: presetChipT.implicitWidth + 20
+                    radius: 6
+                    color: aether.presetActive ? Services.Colors.accent
+                        : Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
+                                  Services.Colors.text.b, 0.08)
+                    Behavior on color { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
                     Text {
                         id: presetChipT
                         anchors.centerIn: parent
@@ -155,6 +161,7 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
+                        pressedTemporary: true
                         onClicked: aether.clearPreset()
                     }
                 }
@@ -203,12 +210,15 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
+                        pressedTemporary: true
                         onClicked: root.menu = root.menu === "modes" ? "" : "modes"
                     }
                 }
                 Rectangle {   // Dark / Light, aether's palette-mode switch
                     id: darkLight
                     width: 104; height: 34; radius: 8
+                    // Subtle press feedback
+                    Behavior on color { ColorAnimation { duration: 80 } }
                     color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
                                    Services.Colors.text.b, 0.08)
                     border.color: Services.Colors.low
@@ -223,6 +233,8 @@ Item {
                                 radius: 8
                                 color: aether.lightMode === modelData.v
                                     ? Services.Colors.accent : "transparent"
+                                // Press feedback
+                                Behavior on color { ColorAnimation { duration: 80 } }
                                 Text {
                                     anchors.centerIn: parent
                                     text: modelData.l
@@ -235,6 +247,7 @@ Item {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
+                                    pressedTemporary: true
                                     onClicked: aether.setLightMode(modelData.v)
                                 }
                             }
@@ -249,6 +262,8 @@ Item {
                     ? Services.Colors.accent
                     : Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
                               Services.Colors.text.b, 0.08)
+                    // Subtle press feedback
+                    Behavior on color { ColorAnimation { duration: 80 } }
                 border.color: Services.Colors.low
                 border.width: 1
                 Text {
@@ -272,6 +287,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+                    pressedTemporary: true
                     onClicked: root.menu = root.menu === "presets" ? "" : "presets"
                 }
             }
@@ -298,6 +314,8 @@ Item {
                     color: Services.Colors.accent
                     font.family: Services.Fonts.family
                     font.pixelSize: 11
+                    // Subtle press feedback
+                    Behavior on implicitWidth { NumberAnimation { duration: 50 } }
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -6
@@ -313,6 +331,8 @@ Item {
                     color: Services.Colors.textMuted
                     font.family: Services.Fonts.family
                     font.pixelSize: 11
+                    // Subtle press feedback
+                    Behavior on implicitWidth { NumberAnimation { duration: 50 } }
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -6

@@ -449,6 +449,7 @@ Variants {
                                             easing.bezierCurve: Services.Motion.emphasizedDecelerate
                                         }
                                     }
+                                cache: true
                                 }
 
                                 // in-box empty click → switch to this workspace

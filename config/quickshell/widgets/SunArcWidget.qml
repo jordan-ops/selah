@@ -184,6 +184,7 @@ WidgetHost {
                 sourceSize.width: 68
                 sourceSize.height: 68
                 smooth: true
+            cache: true
             }
         }
 

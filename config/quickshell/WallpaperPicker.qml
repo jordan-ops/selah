@@ -89,6 +89,7 @@ Item {
                             source: "file://" + modelData
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
+                        cache: true
                         }
 
                         MouseArea {

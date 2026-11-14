@@ -182,6 +182,7 @@ Item {
                                 // thumbnail size instead of full resolution
                                 sourceSize.width: 640
                                 visible: status === Image.Ready
+                            cache: true
                             }
 
                             // four palette stripes from THIS theme's colors.json —

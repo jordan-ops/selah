@@ -52,27 +52,10 @@ hl.window_rule({
 -- Every floating window maps centered — terminals floated with Super+V,
 -- dialogs, the tensaku editor. (Map-time only: the Super+V bind re-centers
 -- on float toggle, since window rules don't re-apply then.)
-hl.window_rule({
-	name = "center-floats",
-	match = { float = true },
-	center = true,
-})
+-- Global centering and sizing for all floats has been removed to prevent
+-- affecting application popups/options. Specific rules for mpv and
+-- image viewers are defined below.
 
--- DEFAULT SIZE FOR ALL FLOATING WINDOWS — cliamp's measurements (1234x721
--- on the 1920x1080 eDP-1), adopted as the session default. `size` only
--- acts on floating windows, so tiled windows are untouched; anything that
--- maps floating (cliamp, mpv, dialogs, ...) opens at this size instead of
--- its own preferred geometry.
--- Matched on class, NOT on `float = true`: static effects are matched
--- before a window's float state is set, so a float-matched rule never
--- fires at map time (verified on 0.56.2 — it silently does nothing).
--- Map-time only: Super+V in binds.lua applies the same size to windows
--- floated mid-session.
-hl.window_rule({
-	name = "default-float-size",
-	match = { class = ".*" },
-	size = { 1234, 721 },
-})
 
 -- tensaku image editor — belt-and-suspenders float+center (the editor
 -- self-floats and center-floats above catches it; this covers builds
@@ -83,6 +66,7 @@ hl.window_rule({
 	match = { class = "^(tensaku|dev\\.tensaku\\.Tensaku)$" },
 	float = true,
 	center = true,
+	size = { 1234, 721 },
 })
 
 hl.window_rule({
@@ -92,14 +76,14 @@ hl.window_rule({
 	center = true,
 })
 -- mpv — always floats. Matched on class "^mpv$" so it catches both the
--- native Wayland app_id and the XWayland class. Centering comes free from
--- "center-floats" above (match = { float = true }), so no explicit center
--- here. Leave this on: a tiled player only sizes itself to the video after
--- the first frame, so it maps at 1x1 and then never re-tiles.
+-- native Wayland app_id and the XWayland class. Centered and sized to the
+-- session default.
 hl.window_rule({
 	name = "mpv-float",
 	match = { class = "^mpv$" },
 	float = true,
+	center = true,
+	size = { 1234, 721 },
 })
 
 -- cliamp — retro terminal music player: floats like mpv (a fixed-size TUI

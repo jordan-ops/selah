@@ -129,8 +129,8 @@ Item {
                     }
                 }
 
-                // knob throw — the pop spring overshoots the end stop and
-                // snaps back: the M3 switch bounce, felt not just seen
+                // knob throw — the pop spring carries the knob to the end
+                // stop fast (~246ms), landing clean since the 2026-11 retune
                 Behavior on x {
                     SpringAnimation {
                         spring: Services.Motion.popSpring

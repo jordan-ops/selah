@@ -183,6 +183,7 @@ PanelWindow{
                 sourceSize.width: 1600
                 sourceSize.height: 900
                 asynchronous: true
+            cache: true
             }
 
             Rectangle {

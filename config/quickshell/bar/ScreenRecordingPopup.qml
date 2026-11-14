@@ -263,7 +263,7 @@ Rectangle {
                     font.bold: true
                     color: "#ffffff"
                 }
-                MouseArea { anchors.fill: parent; onClicked: Services.ScreenRecording.startRecording() }
+                MouseArea { anchors.fill: parent; onClicked: { Services.ScreenRecording.startRecording(); Services.ScreenRecording.close(); } }
             }
 
             Rectangle {

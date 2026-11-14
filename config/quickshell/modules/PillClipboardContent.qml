@@ -195,6 +195,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         fillMode: Image.PreserveAspectFit
                         source: row.isImage ? "file://" + modelData.path : ""
+                    cache: true
                     }
 
                     Text {

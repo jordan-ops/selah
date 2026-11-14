@@ -22,6 +22,8 @@ Item {
     // both the "is this edited?" styling and where the fill starts.
     property real def: 0
     property bool atDefault: Math.abs(value - def) < 0.0001
+    // Press state for visual feedback
+    property bool pressed: false
 
     signal committed(real v)
 
@@ -49,6 +51,8 @@ Item {
             color: root.atDefault ? Services.Colors.textMuted : Services.Colors.text
             font.family: Services.Fonts.family
             font.pixelSize: 12
+            // Press feedback
+            Behavior on color { ColorAnimation { duration: 80 } }
         }
 
         Item {
@@ -63,6 +67,8 @@ Item {
                 width: parent.width
                 height: 5
                 radius: 3
+                // Subtle press feedback
+                Behavior on color { ColorAnimation { duration: 80 } }
                 color: Qt.rgba(Services.Colors.text.r, Services.Colors.text.g,
                                Services.Colors.text.b, 0.16)
 
@@ -81,6 +87,7 @@ Item {
                     height: parent.height
                     radius: 3
                     color: Services.Colors.accent
+                    Behavior on color { ColorAnimation { duration: 80 } }
                 }
 
                 Rectangle {
@@ -94,14 +101,18 @@ Item {
                     color: Services.Colors.accent
                     border.color: Services.Colors.background
                     border.width: 2
+                    // Press feedback
+                    Behavior on color { ColorAnimation { duration: 80 } }
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -8              // generous grab zone
                     cursorShape: Qt.PointingHandCursor
-                    onPressed: mouse => setFrom(mouse.x)
-                    onPositionChanged: mouse => { if (pressed) setFrom(mouse.x) }
+                    // Track pressed state for visual feedback
+                    onPressed: { root.pressed = true }
+                    onReleased: { root.pressed = false }
+                    onPositionChanged: mouse => { if (root.pressed) setFrom(mouse.x) }
                     function setFrom(x) {
                         const norm = Math.max(0, Math.min(1, x / track.width))
                         root.committed(root.snap(root.min + norm * (root.max - root.min)))
@@ -120,6 +131,8 @@ Item {
             font.family: Services.Fonts.family
             font.pixelSize: 12
             font.bold: !root.atDefault
+            // Press feedback
+            Behavior on color { ColorAnimation { duration: 80 } }
         }
     }
 }

@@ -53,6 +53,7 @@ WidgetHost {
                     sourceSize.width: 44
                     sourceSize.height: 44
                     source: IconUtil.getSystemIcon(ServiceWeather.weatherIconPath.svg)
+                cache: true
                 }
 
                 ColumnLayout {
@@ -135,6 +136,7 @@ WidgetHost {
                                 sourceSize.width: 28
                                 sourceSize.height: 28
                                 source: getDayIcon(ServiceWeather.forecastDays[index])
+                            cache: true
                             }
 
                             RowLayout {

@@ -1204,8 +1204,9 @@ FocusScope {
                     script: pageShift.x = app.pageDir * 40
                 }
                 ParallelAnimation {
-                    // spatial half springs in — arrives, overshoots a hair,
-                    // settles aligned (M3E: spatial motion = springs)
+                    // spatial half springs in — arrives and settles
+                    // aligned, no overshoot (2026-11 retune; M3E: spatial
+                    // motion = springs)
                     SpringAnimation {
                         target: pageShift
                         property: "x"

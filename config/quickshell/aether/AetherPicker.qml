@@ -57,6 +57,12 @@ Variants {
 
         visible: owns
         color: Services.Colors.background
+
+        // Entrance/exit animation state
+        property real panelScale: owns ? 1.0 : 0.96
+        property real panelOpacity: owns ? 1.0 : 0.0
+        Behavior on panelScale { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
+        Behavior on panelOpacity { NumberAnimation { duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
         anchors { top: true; bottom: true; left: true; right: true }
         // Full-screen overlay: never reserves space for the bar.
         exclusionMode: ExclusionMode.Ignore
@@ -242,6 +248,9 @@ Variants {
             Rectangle {
                 anchors.fill: parent
                 color: Qt.rgba(0, 0, 0, 0.86)
+                opacity: win.owns ? 1.0 : 0.0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Services.Motion.emphasizedDecelerate } }
             }
 
             // --- panel ----------------------------------------------------
@@ -255,6 +264,10 @@ Variants {
                 border.color: win.hairline
                 border.width: 1
                 clip: true
+                opacity: win.panelOpacity
+                scale: win.panelScale
+                transformOrigin: Item.Center
+                visible: opacity > 0.01
 
                 // ---------- header ----------
                 Item {

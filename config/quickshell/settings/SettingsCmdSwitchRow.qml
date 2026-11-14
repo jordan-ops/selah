@@ -131,7 +131,7 @@ Item {
                     }
                 }
 
-                // knob throw — pop spring: overshoots the end stop, snaps back
+                // knob throw — pop spring: quick ~246ms throw, lands clean
                 Behavior on x {
                     SpringAnimation {
                         spring: Services.Motion.popSpring

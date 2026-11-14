@@ -66,7 +66,6 @@ Item {
             }
         }
 
-        MediaVisualiser {}
 
         Clock {}
 
@@ -144,7 +143,6 @@ Item {
             anchors.centerIn: parent
             spacing: 10
 
-            MediaVisualiser {}
 
             Clock {
                 id: clockItem

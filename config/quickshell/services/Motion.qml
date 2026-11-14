@@ -9,23 +9,25 @@ import QtQuick
 //
 //   SPATIAL (size / position / scale) → real spring physics.
 //     Qt SpringAnimation parameter pairs below were measured empirically on
-//     this machine's Qt (offscreen harness, 0→100 step, reporting overshoot%
-//     and time-to-within-±0.5%): `damping` behaves like a damping ratio where
-//     LOWER = faster to rest (Qt's docs were right), `spring` is stiffness
-//     (the documented 0–5 "useful range" is conservative — 6–21 lands in
-//     usable UI speeds), and overshoot rises with stiffness and falls with
-//     damping. Every pair below is MEASURED on this machine's Qt 6 (test
-//     harness /tmp/opencode/springtest/tests — 0→100 step, 5ms sampling,
-//     qmltestrunner junit output) and tuned to M3 Expressive's schemes:
-//     the expressive motion scheme OVERSHOOTS final values to add bounce
-//     (spatial springs bounce into place), while effects never bounce.
-//     Retuned 1.5× slower to match durationScale below — same overshoot
-//     bands, longer settle (parentheses = the pre-retune pair and settle):
-//       default: spring 6 / 0.42    → ~2.3% overshoot, 325ms settle (was 30/0.8,   205ms — structural morphs)
-//       fast:    spring 18 / 0.58   → ~7%   overshoot, 175ms settle (was 40/0.8,   118ms — small/fast components)
-//       slow:    spring 11 / 0.78   → ~0%   overshoot, 345ms settle (was 15/0.78,  200ms — large moves stay calm)
-//       bounce:  spring 19 / 0.53   → ~12%  overshoot, 235ms settle (was 35/0.7,   143ms — interactive travels)
-//       pop:     spring 21 / 0.47   → ~20%  overshoot, 270ms settle (was 45/0.65,  147ms — press→release scale)
+//     this machine's Qt (offscreen harness /tmp/opencode/springtest/tests —
+//     0→100 step, 5ms sampling, qmltestrunner output, reporting overshoot%
+//     and time-to-within-±0.5%). Model derived from those measurements —
+//     `damping` is NOT a damping ratio: it acts as a coefficient whose
+//     critical value is ≈0.2213·√spring (so ζ = damping/c_crit,
+//     ωn ≈ 9.035·√spring), and raising it past critical only LENGTHENS
+//     the settle — the spring must rise to compensate. `spring` is
+//     stiffness (the documented 0–5 "useful range" is conservative —
+//     3–18 lands in usable UI speeds); overshoot falls as ζ → 1.
+//     2026-11 retune to hyprdots' isle-spring character: every spatial
+//     spring now lands with ≤0.3% overshoot (was 2–20%; hyprdots' isle
+//     family runs ζ0.86–1.00 — kiss the mark and stop, no bounce) while
+//     keeping each pair's settle tempo within ±10% (parens = the pair
+//     before this retune, i.e. the 2026-09 1.5×-slower set):
+//       default: spring 3 / 0.35   → ~0.3% overshoot, 339ms settle (was 6/0.42,   2.3% overshoot, 325ms — structural morphs)
+//       fast:    spring 18 / 0.85  → ~0%   overshoot, 184ms settle (was 18/0.58,  7%   overshoot, 175ms — small/fast components)
+//       slow:    spring 11 / 0.78  → ~0%   overshoot, 309ms settle (unchanged     — large moves stay calm)
+//       bounce:  spring 8 / 0.56   → ~0%   overshoot, 217ms settle (was 19/0.53,  12%  overshoot, 235ms — interactive travels)
+//       pop:     spring 6 / 0.49   → ~0.1% overshoot, 246ms settle (was 21/0.47,  20%  overshoot, 270ms — press→release scale)
 //     Springs also retarget with velocity — flipping pill modes mid-morph
 //     carries momentum instead of restarting from zero. That's the whole
 //     point of Expressive spatial motion.
@@ -59,20 +61,20 @@ import QtQuick
 //     no fade — both sides share one curve so they read as one object
 //   • begin/end on screen (in-place value changes) → 500 emphasized
 //
-// BOUNCE (M3E "expressive" scheme): spatial enters and interactive travels
-// ride the measured springs above (bounce / pop, plus default's light 2%
-// overshoot) — spatial springs overshoot into place; fades and colors keep
-// the bezier pairs, exits never bounce. ~/.config/hypr/appearance.lua
-// mirrors the curves AND the bounce idea as compositor springs (m3Bounce /
-// m3BounceWide on windowsIn / workspaces, slide styles), so shell and
-// Hyprland move as one system.
+// BOUNCE → LANDING (M3E "expressive" scheme, damped 2026-11 to hyprdots'
+// isle character): spatial enters and interactive travels ride the measured
+// springs above — they now kiss the mark and stop (≤0.3% overshoot) instead
+// of bouncing; fades and colors keep the bezier pairs, exits never bounce.
+// ~/.config/hypr/appearance.lua mirrors the same feel as compositor springs
+// (isle / isleCalm / isleGlide on windowsIn / layersIn / workspaces, slide
+// styles kept), so shell and Hyprland move as one system.
 Singleton {
     id: root
 
     // ---------------- settings.json knobs (settings app → Animations tab) ----------------
     // motion.enabled    — false = reduced motion: duration tokens drop to 0
     //                     (every NumberAnimation snaps) and springs take the
-    //                     measured instant pair (50/1: 65ms settle, 0%
+    //                     measured instant pair (50/1: 72ms settle, 0%
     //                     overshoot — spring 0 sticks at the start, so a
     //                     SpringAnimation can't be truly "off").
     // motion.speedScale — 0.5–1.5, 1 = this file's tuned feel (default).
@@ -149,26 +151,27 @@ Singleton {
     // ---------------- spatial springs → Qt SpringAnimation (measured values) ----------------
     // usage: SpringAnimation { spring: Services.Motion.spatialSpring; damping: Services.Motion.spatialDamping }
     // overshoot/settle measured at 5ms sampling; re-run the harness to retune
-    // The pairs carry their measured %/ms comments below at speedScale=1;
-    // motion.speedScale retimes them ζ-preserving (stiffness ×s², damping
-    // ×s — the same retune math appearance.lua documents for its own
-    // springs), and motion.enabled = false snaps every pair to the
-    // measured instant pair (50/1: 65ms, 0% overshoot) so reduced motion
+    // The pairs' measured %/ms live in the header comment above, at
+    // speedScale=1; motion.speedScale retimes them ζ-preserving (stiffness
+    // ×s², damping ×s — the same retune math appearance.lua documents for
+    // its own springs), and motion.enabled = false snaps every pair to the
+    // measured instant pair (50/1: 72ms, 0% overshoot) so reduced motion
     // keeps zero bounce.
-    readonly property int spatialSpring: motionOn ? Math.round(6 * speedScale * speedScale) : 50
-    readonly property real spatialDamping: motionOn ? 0.42 * speedScale : 1
+    readonly property int spatialSpring: motionOn ? Math.round(3 * speedScale * speedScale) : 50
+    readonly property real spatialDamping: motionOn ? 0.35 * speedScale : 1
     readonly property int spatialFastSpring: motionOn ? Math.round(18 * speedScale * speedScale) : 50
-    readonly property real spatialFastDamping: motionOn ? 0.58 * speedScale : 1
+    readonly property real spatialFastDamping: motionOn ? 0.85 * speedScale : 1
     readonly property int spatialSlowSpring: motionOn ? Math.round(11 * speedScale * speedScale) : 50
     readonly property real spatialSlowDamping: motionOn ? 0.78 * speedScale : 1
     // M3E expressive: interactive travels — switch throws, list enters,
-    // page slides, indicator slides — reads as a clear bounce
-    readonly property int bounceSpring: motionOn ? Math.round(19 * speedScale * speedScale) : 50
-    readonly property real bounceDamping: motionOn ? 0.53 * speedScale : 1
+    // page slides, indicator slides — hyprdots-landed: stops dead at the
+    // target (~217ms), no overshoot
+    readonly property int bounceSpring: motionOn ? Math.round(8 * speedScale * speedScale) : 50
+    readonly property real bounceDamping: motionOn ? 0.56 * speedScale : 1
     // press→release scale pops: the delta is tiny (e.g. 0.94→1.0), so the
-    // overshoot band must be large for the bounce to be visible at all
-    readonly property int popSpring: motionOn ? Math.round(21 * speedScale * speedScale) : 50
-    readonly property real popDamping: motionOn ? 0.47 * speedScale : 1
+    // spring is quick (~246ms) — lands clean, no bounce
+    readonly property int popSpring: motionOn ? Math.round(6 * speedScale * speedScale) : 50
+    readonly property real popDamping: motionOn ? 0.49 * speedScale : 1
 
     // ---------------- staggered entrances (M3 grids/lists cascade in) ----------------
     readonly property int staggerStep: Math.round(40 * durationScale)   // 60

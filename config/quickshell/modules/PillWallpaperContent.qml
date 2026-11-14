@@ -218,6 +218,7 @@ Item {
                                 source: "file://" + modelData
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: true   // keeps the strip from freezing while loading
+                            cache: true
                             }
 
                             MouseArea {

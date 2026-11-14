@@ -114,6 +114,7 @@ WidgetHost {
                     sourceSize.height: 40
                     asynchronous: true
                     source: IconUtil.getSystemIcon(ServiceWeather.weatherIconPath.svg)
+                cache: true
                 }
 
                 CustomText {
@@ -245,6 +246,7 @@ WidgetHost {
                             sourceSize.height: 36
                             asynchronous: true
                             source: root.dayIcon(day)
+                        cache: true
                         }
 
                         CustomText {

@@ -101,54 +101,88 @@ hl.curve("m3Decelerate",   { type = "bezier", points = { {0.05, 0.7},  {0.1, 1} 
 hl.curve("m3Accelerate",   { type = "bezier", points = { {0.3, 0},     {0.8, 0.15}  } })
 hl.curve("m3Standard",     { type = "bezier", points = { {0.2, 0},     {0, 1}       } })
 
--- Springs. ζ (damping ratio) = dampening / (2·√(stiffness·mass)):
---   easy         ζ0.78 — move/resize: velocity-retargeting
---   m3Bounce     ζ0.76 → ~2.6% overshoot — window slides kiss past their
---                mark and settle back (M3E spatial springs bounce into
---                place); overshoot is proportional to travel, and window
---                travel is monitor-scale, so this stays ~2.6%
---   m3BounceWide ζ0.85 → ~0.6% overshoot — a workspace slide crosses the
---                whole monitor; at 3% an overshoot would uncover an ~80px
---                edge sliver for a few frames, so this stays gentle
---                (≈16px at 2560w) while still reading as a bounce
--- 2026-09 retune ("animations too fast"): stiffness ÷2.25, dampening ÷1.5
--- keeps every ζ (so overshoot px is unchanged) while stretching each
--- spring 1.5× in time — matches Motion.qml durationScale 1.5, so shell
--- and compositor slow down as one system.
-hl.curve("easy",           { type = "spring", mass = 1, stiffness = 105.83, dampening = 16.14 })
-hl.curve("m3Bounce",       { type = "spring", mass = 1, stiffness = 105.83, dampening = 15.63 })
-hl.curve("m3BounceWide",   { type = "spring", mass = 1, stiffness = 105.83, dampening = 17.49 })
+-- hyprdots' two extra curves (its md3_standard / md3_decel / md3_accel are
+-- byte-identical to m3Standard / m3Decelerate / m3Accelerate above, so only
+-- the genuinely new ones are added):
+--   glide     sharp attack, long tail — borders, switches
+--   closeSoft soft ease-out with no bounce — window closes, fade-outs
+hl.curve("glide",          { type = "bezier", points = { {0.10, 0.90}, {0.15, 1.00} } })
+hl.curve("closeSoft",      { type = "bezier", points = { {0.32, 0.00}, {0.18, 1.00} } })
 
--- Motion per the M3 specs + M3E springs: window/workspace transitions
--- SLIDE (no more pop-in / fade). Spatial ENTERS ride the bounce springs —
--- they overshoot their mark and settle back (M3 Expressive: "the physics
--- system is replacing the previous system based on easing and duration",
--- spatial springs overshoot to add bounce). EXITS still accelerate out
--- with no bounce, effects (fade/layers) keep the bezier pairs, and
--- in-screen changes ride the standard curve. speed is ds: 1ds = 100ms
--- (springs time themselves; speed stays as fallback/docs). `windows`
--- itself keeps `easy` — move/resize is velocity-retargeted spring motion.
--- Every speed below is ×1.5 since 2026-09 (same retune as the springs and
--- Motion.qml durationScale — "animations too fast"); zoomFactor is exempt
--- (its 7ds is already a deliberate slow zoom).
+-- Springs. ζ (damping ratio) = dampening / (2·√(stiffness·mass)).
+--
+-- 2026-11: replaced easy / m3Bounce / m3BounceWide with hyprdots' isle
+-- family — verified genuinely better, not just slower: ζ0.86/0.96/1.00 vs
+-- our old 0.78/0.76/0.85, so overshoot drops from 1.9–2.6% to ~0.5%/0/0
+-- while settling 457–512ms → 467/457/525ms (same tempo, ~4× less wobble).
+-- hyprdots derives each spring from a response/damping-ratio pair
+-- (w = 2π/response; stiffness = w²; dampening = 2·ζ·w), then we stretch
+-- 1.5× in time (stiffness ÷2.25, dampening ÷1.5 — same retune as
+-- Motion.qml's springs and the speeds below, so shell and compositor
+-- keep moving as one system; ζ is unchanged by the stretch):
+--   isle       hyprdots 0.42s / ζ0.86 → 99.47 / 17.15 — move/resize
+--              generic, velocity-retargeting, ~0.5% overshoot
+--   isleCalm   hyprdots 0.46s / ζ0.96 → 82.92 / 17.48 — window/layer
+--              opens: kisses the mark and stops, no bounce
+--   isleGlide  hyprdots 0.55s / ζ1.00 → 58.00 / 15.23 — critically
+--              damped workspace slides: dead straight, no edge sliver
+--              (the old ζ0.85 kiss-past was ≈16px at 2560w)
+hl.curve("isle",           { type = "spring", mass = 1, stiffness = 99.47,  dampening = 17.15 })
+hl.curve("isleCalm",       { type = "spring", mass = 1, stiffness = 82.92,  dampening = 17.48 })
+hl.curve("isleGlide",      { type = "spring", mass = 1, stiffness = 58.00,  dampening = 15.23 })
+
+-- Motion copied from hyprdots' animation set (2026-11), with OUR styles
+-- kept: windows and workspaces still SLIDE in unison (the M3 carousel/tab
+-- rule) instead of hyprdots' popin 86%/93% and slidefade 12%. Curves and
+-- speed ratios are theirs — md3_decel / md3_accel / md3_standard are
+-- byte-identical to m3Decelerate / m3Accelerate / m3Standard above, and
+-- glide / closeSoft were added above — and every speed below is theirs
+-- ×1.5 to keep the pairing with Motion.qml durationScale 1.5 (both
+-- halves run 1.5× their nominal).
+-- speed is ds: 1ds = 100ms, and it only times BEZIER curves — springs
+-- ignore it entirely (hyprutils advanceSpring() steps by real elapsed
+-- time until the spring settles), so spring speeds are documentation.
+-- `windows`/`windowsMove` keep the velocity-retargeting generic isle;
+-- `fade`/`layers` stay on m3Standard as fallbacks for the leaves not
+-- listed (fadeGlow, fadeDpms).
 hl.animation({ leaf = "global",        enabled = true,  speed = 15,    bezier = "default" })
-hl.animation({ leaf = "border",        enabled = true,  speed = 8.09,  bezier = "m3Standard" })
-hl.animation({ leaf = "windows",       enabled = true,  speed = 10,    spring = "easy" })
-hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 12,    spring = "m3Bounce",      style = "slide" })
-hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 3,     bezier = "m3Accelerate",   style = "slide" })
-hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 12,    bezier = "m3Decelerate" })
-hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 3,     bezier = "m3Accelerate" })
+hl.animation({ leaf = "border",        enabled = true,  speed = 13.5,  bezier = "glide" })
+hl.animation({ leaf = "borderangle",   enabled = true,  speed = 90,    bezier = "linear" })
+
+-- windows: opens ride isleCalm (ζ0.96 — lands and stays) and still slide
+-- in as one; closes ease out on closeSoft (no bounce, hyprdots' whole
+-- exit language is "soft close")
+hl.animation({ leaf = "windows",       enabled = true,  speed = 7.05,  spring = "isle" })
+hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 7.5,   spring = "isleCalm",    style = "slide" })
+hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 8.4,   bezier = "closeSoft",   style = "slide" })
+hl.animation({ leaf = "windowsMove",   enabled = true,  speed = 7.05,  spring = "isle" })
+
+-- fades: enter on M3 decelerate, exit on closeSoft, switches/geometry on
+-- glide, popups accelerate out
+hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 6,     bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 7.5,   bezier = "closeSoft" })
 hl.animation({ leaf = "fade",          enabled = true,  speed = 4.5,   bezier = "m3Standard" })
+hl.animation({ leaf = "fadeSwitch",    enabled = true,  speed = 6,     bezier = "glide" })
+hl.animation({ leaf = "fadeShadow",    enabled = true,  speed = 7.5,   bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadeDim",       enabled = true,  speed = 6,     bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadePopupsIn",  enabled = true,  speed = 4.5,   bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadePopupsOut", enabled = true,  speed = 3,     bezier = "m3Accelerate" })
+
+-- layers: enter on the isleCalm spring with our fade style (hyprdots
+-- pops in from 92%), exit accelerates out
 hl.animation({ leaf = "layers",        enabled = true,  speed = 5.72,  bezier = "m3Standard" })
-hl.animation({ leaf = "layersIn",      enabled = true,  speed = 6,     bezier = "m3Decelerate",   style = "fade" })
-hl.animation({ leaf = "layersOut",     enabled = true,  speed = 3,     bezier = "m3Accelerate",   style = "fade" })
-hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 2.69,  bezier = "m3Decelerate" })
-hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 2.09,  bezier = "m3Accelerate" })
+hl.animation({ leaf = "layersIn",      enabled = true,  speed = 7.5,   spring = "isleCalm",    style = "fade" })
+hl.animation({ leaf = "layersOut",     enabled = true,  speed = 4.5,   bezier = "m3Accelerate", style = "fade" })
+hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 4.5,   bezier = "m3Decelerate" })
+hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 3,     bezier = "m3Accelerate" })
+
 -- workspaces: lateral motion = M3's carousel/tab rule — slide in unison,
--- no fade, same spring on both sides of the switch so old and new move as
--- one; m3BounceWide (ζ0.85) kisses ~16px past at 2560w and settles — a
--- bounce without uncovering the monitor edge.
-hl.animation({ leaf = "workspaces",    enabled = true,  speed = 3,    spring = "m3BounceWide",   style = "slide" })
-hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 3,    spring = "m3BounceWide",   style = "slide" })
-hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 3,    spring = "m3BounceWide",   style = "slide" })
-hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "m3Standard" })
+-- no fade, one critically-damped spring (isleGlide, ζ1.00) on both sides
+-- of the switch so old and new move as one with zero overshoot
+hl.animation({ leaf = "workspaces",    enabled = true,  speed = 10.05, spring = "isleGlide",   style = "slide" })
+hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 10.05, spring = "isleGlide",   style = "slide" })
+hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 10.05, spring = "isleGlide",   style = "slide" })
+hl.animation({ leaf = "specialWorkspaceIn",  enabled = true, speed = 10.05, spring = "isleGlide", style = "slidevert" })
+hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 6,     bezier = "m3Accelerate", style = "slidevert" })
+
+hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7.5,   spring = "isleCalm" })

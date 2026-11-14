@@ -551,6 +551,7 @@ Rectangle {
                             anchors.fill: parent
                             source: Services.Media.artUrl !== "" ? Services.Media.artUrl : Services.Media.appIconSource
                             fillMode: Image.PreserveAspectFit
+                        cache: true
                         }
 
                         MouseArea {
@@ -868,12 +869,12 @@ Rectangle {
 
                 // M3 spec motion (m3.material.io/styles/motion): new cards
                 // ENTER by dropping one row up into the top slot (the 64px
-                // drop) — the slide rides the bounce spring
-                // (overshoots its slot and settles, M3E spatial = springs)
+                // drop) — the slide rides the bounce spring (lands in its
+                // slot with no overshoot since the 2026-11 hyprdots retune)
                 // while the fade keeps emphasized decelerate; removals
                 // accelerate out with no bounce; rows pushed aside spring
                 // into their new slots, so "Clear all" collapses as one
-                // soft bouncing cascade.
+                // soft cascade.
                 add: Transition {
                     ParallelAnimation {
                         NumberAnimation {
@@ -908,8 +909,8 @@ Rectangle {
                 }
 
                 displaced: Transition {
-                    // shoved rows overshoot their new slot slightly and
-                    // spring back — M3E spatial settles with a bounce
+                    // shoved rows spring into their new slots — M3E spatial,
+                    // lands clean with no overshoot (2026-11 retune)
                     SpringAnimation {
                         property: "y"
                         spring: Services.Motion.bounceSpring
@@ -1242,9 +1243,9 @@ Rectangle {
         property bool active: false
         // Press-down scale — starts the instant the cursor is down, not
         // on release. This alone tells you the tap landed. On release the
-        // pop spring overshoots so the tile bounces back (M3E expressive
-        // toggle), and the active state lifts the scale a touch so the
-        // flip is felt, not just seen.
+        // pop spring snaps the scale back up fast (~246ms, clean landing —
+        // no bounce since the 2026-11 retune), and the active state lifts
+        // the scale a touch so the flip is felt, not just seen.
         property real pressEff: 1
 
         signal toggled()

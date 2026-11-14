@@ -29,6 +29,7 @@ Rectangle {
                 source: "file://" + modelData
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true   // keeps the grid from freezing while loading
+            cache: true
             }
 
             MouseArea {
